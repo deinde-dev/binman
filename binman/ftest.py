@@ -9549,6 +9549,18 @@ fdt         fdtmap                Extract the devicetree blob from the fdtmap
         self.assertEqual(len(subnode4.props), 0,
                         "subnode shouldn't have any properties")
 
+    def testTemplatePhandleCopy(self):
+        """Test if phandles are copied properly when inserting template"""
+        _, _, _, fname = self._DoReadFileDtb('fdt/template_phandle_copy.dts')
+        dtb = fdt.Fdt(fname)
+        dtb.Scan()
+        parent = dtb.GetNode("/binman/section@0/section@1")
+        child = parent.FindNode("section@2")
+        parent_phandle = fdt_util.fdt32_to_cpu(child.props["parent"].value)
+        child_phandle = fdt_util.fdt32_to_cpu(parent.props["child"].value)
+        self.assertEqual(parent, dtb.LookupPhandle(parent_phandle))
+        self.assertEqual(child, dtb.LookupPhandle(child_phandle))
+
     def testPlainMode(self):
         """Test building images without U-Boot mode
 
