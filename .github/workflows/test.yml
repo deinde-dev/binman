@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Restore the tools from the cache
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: uboot-tools.tar
           key: uboot-tools-${{ env.UBOOT_REF }}
@@ -105,7 +105,7 @@ jobs:
           pip install -e .[test]
 
       - name: Restore the fetched bintools from the cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.binman-tools
           key: binman-tools-${{ hashFiles('binman/btool/*.py') }}
@@ -164,7 +164,7 @@ jobs:
           pip install -e .[test]
 
       - name: Restore the fetched bintools from the cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.binman-tools
           key: binman-tools-${{ hashFiles('binman/btool/*.py') }}
