@@ -11,3 +11,6 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    # Update only the pins in requirements.txt; leave the minimum versions
+    # in pyproject.toml alone unless a new release falls outside them
+    versioning-strategy: increase-if-necessary
