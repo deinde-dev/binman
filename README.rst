@@ -1,8 +1,8 @@
 Binman firmware packager
 ========================
 
-.. image:: https://github.com/nxtboot/binman/actions/workflows/test.yml/badge.svg
-   :target: https://github.com/nxtboot/binman/actions/workflows/test.yml
+.. image:: https://github.com/deinde-dev/binman/actions/workflows/test.yml/badge.svg
+   :target: https://github.com/deinde-dev/binman/actions/workflows/test.yml
    :alt: Test status
 
 .. image:: https://img.shields.io/pypi/v/binary-manager.svg

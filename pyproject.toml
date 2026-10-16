@@ -37,10 +37,10 @@ dependencies = [
 test = ["concurrencytest", "coverage"]
 
 [project.urls]
-Homepage = "https://github.com/nxtboot/binman"
+Homepage = "https://github.com/deinde-dev/binman"
 Documentation = "https://binman.readthedocs.io/"
-Repository = "https://github.com/nxtboot/binman"
-"Bug Tracker" = "https://github.com/nxtboot/binman/issues"
+Repository = "https://github.com/deinde-dev/binman"
+"Bug Tracker" = "https://github.com/deinde-dev/binman/issues"
 
 [project.scripts]
 binman = "binman.main:start_binman"

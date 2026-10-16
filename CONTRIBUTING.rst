@@ -81,7 +81,7 @@ with the separate ``dtoc`` package. ``binman/__init__.py`` adds
 it by its usual name and matches the U-Boot tree.
 
 The U-Boot Python library is not vendored: it is a dependency, from the
-``u-boot-pylib`` package (https://github.com/nxtboot/u-boot-pylib).
+``u-boot-pylib`` package (https://github.com/deinde-dev/u-boot-pylib).
 
 When refreshing these from U-Boot, note the U-Boot commit in the commit
 message.

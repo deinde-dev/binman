@@ -54,7 +54,7 @@ Fixed
 Changed
 ~~~~~~~
 - Binman is now developed in its own repository at
-  https://github.com/nxtboot/binman, with its history carried over from
+  https://github.com/deinde-dev/binman, with its history carried over from
   the U-Boot tree.
 - Binman is distributed as the self-contained ``binary-manager`` package,
   with ``u_boot_pylib`` and the ``dtoc`` devicetree library vendored in,
