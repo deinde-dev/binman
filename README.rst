@@ -77,6 +77,8 @@ Full documentation is hosted on Read the Docs:
 
     https://binman.readthedocs.io/
 
+There is a short introduction, with a demo, at https://deinde.dev/binman/
+
 Development
 -----------
 
