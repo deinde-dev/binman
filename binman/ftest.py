@@ -14,6 +14,7 @@ import hashlib
 from optparse import OptionParser
 import os
 import re
+import shlex
 import shutil
 import struct
 import sys
@@ -1917,6 +1918,100 @@ class TestFunctional(unittest.TestCase):
         with self.assertRaises(ValueError) as e:
             self._DoTestFile('entry/etype_dir.dts')
         self.assertIn("Unknown entry type 'dev-etype'", str(e.exception))
+
+    @staticmethod
+    def _ReadDocExample(fname, heading):
+        """Read the literal blocks from a section of a document
+
+        Each block is a code block, or a literal block introduced by '::'. Its
+        name is the last ``name`` given in the paragraph before it, if any.
+
+        Args:
+            fname (str): Filename of the reStructuredText document
+            heading (str): Heading of the section to read
+
+        Returns:
+            list of tuple:
+                str: Name given before the block, or None
+                str: Contents of the block, without its indentation
+        """
+        lines = tools.read_file(fname, binary=False).splitlines()
+        start = lines.index(heading) + 2
+        end = start
+        while end + 1 < len(lines) and not re.match(r'^-+$', lines[end + 1]):
+            end += 1
+        lines = lines[start:end]
+
+        blocks = []
+        para = []
+        upto = 0
+        while upto < len(lines):
+            line = lines[upto]
+            upto += 1
+            if line.endswith('::') or line.startswith('.. code-block::'):
+                # A code block follows the paragraph which introduces it
+                if line.startswith('..'):
+                    line = ''
+                names = re.findall(r'``([^`]+)``', ' '.join(para + [line]))
+                block = []
+                while upto < len(lines) and (not lines[upto].strip() or
+                                             lines[upto].startswith('    ')):
+                    block.append(lines[upto][4:])
+                    upto += 1
+                blocks.append((names[-1] if names else None,
+                               '\n'.join(block).strip() + '\n'))
+                para = []
+            elif line.strip():
+                # Start a new paragraph after a blank line
+                if upto >= 2 and not lines[upto - 2].strip():
+                    para = []
+                para.append(line)
+        return blocks
+
+    def testEtypeDevExample(self):
+        """Test the example in the guide to developing entry types
+
+        This writes out the files given in the example, then runs each binman
+        command in it and checks the output of each 'cat' command. Binman runs
+        in a separate process, so that the coverage check does not see the
+        example's entry type, which is removed afterwards.
+        """
+        doc_fname = os.path.join(self._binman_dir, '..', 'doc', 'etype_dev.rst')
+        if not os.path.exists(doc_fname):
+            self.skipTest('Documentation is not available')
+        blocks = self._ReadDocExample(doc_fname, 'An example')
+
+        tmpdir = tempfile.mkdtemp(prefix='binman.etype_dev.')
+        try:
+            ran = 0
+            for name, text in blocks:
+                if not text.startswith('$ '):
+                    fname = os.path.join(tmpdir, name)
+                    os.makedirs(os.path.dirname(fname), exist_ok=True)
+                    tools.write_file(fname, text, binary=False)
+                    continue
+
+                # Run the commands, checking the output of each 'cat'
+                for cmd in text.split('$ ')[1:]:
+                    line, *output = cmd.splitlines()
+                    argv = shlex.split(line)
+                    if argv[0] == 'binman':
+                        result = command.run_one(
+                            sys.executable, self._binman_pathname, *argv[1:],
+                            cwd=tmpdir, capture=True, capture_stderr=True,
+                            raise_on_error=False)
+                        self.assertEqual(0, result.return_code,
+                                         result.stdout + result.stderr)
+                    else:
+                        self.assertEqual('cat', argv[0])
+                        self.assertEqual(
+                            '\n'.join(output),
+                            tools.read_file(os.path.join(tmpdir, argv[1]),
+                                            binary=False))
+                    ran += 1
+            self.assertEqual(2, ran)
+        finally:
+            shutil.rmtree(tmpdir)
 
     def testFillNoSize(self):
         """Test for an fill entry type with no size"""
