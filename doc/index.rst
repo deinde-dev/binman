@@ -9,6 +9,8 @@ Trusted Firmware, but is general enough to be used with other projects.
 
 The project is hosted at https://github.com/deinde-dev/binman
 
+There is a short introduction, with a demo, at https://deinde.dev/binman/
+
 .. toctree::
    :maxdepth: 2
 
