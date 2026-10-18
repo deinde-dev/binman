@@ -525,6 +525,11 @@ class Entry_section(Entry):
         for entry in self._entries.values():
             if not entry.ProcessContents():
                 sizes_ok = False
+
+        # A change to the contents of an entry can change the size of the
+        # compressed section, even if the entry stays the same size
+        if sizes_ok and self.compress != 'none':
+            sizes_ok = self.ProcessContentsUpdate(self.BuildSectionData(True))
         return sizes_ok and sizes_ok_base
 
     def WriteMap(self, fd, indent):

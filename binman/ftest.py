@@ -5107,6 +5107,24 @@ class TestFunctional(unittest.TestCase):
             }
         self.assertEqual(expected, props)
 
+    def testCompressSectionUpdate(self):
+        """Test a compressed section whose contents change after packing
+
+        Updating the devicetree with the image layout keeps it the same size,
+        but changes the size of the compressed section which holds it. The
+        image must hold all of the compressed data.
+        """
+        self._CheckLz4()
+        data = self._DoReadFileDtb('entry/compress_section_update.dts',
+                                   use_real_dtb=True, update_dtb=True)[0]
+        section = control.images['image'].GetEntries()['section']
+        self.assertLessEqual(len(section.data), section.size)
+        self.assertEqual(section.data, data[:len(section.data)])
+
+        dtb_data = tools.read_file(tools.get_output_filename('u-boot.dtb.out'))
+        self.assertEqual(COMPRESS_DATA + dtb_data,
+                         self._decompress(section.data))
+
     def testLz4Missing(self):
         """Test that binman still produces an image if lz4 is missing"""
         with terminal.capture() as (_, stderr):

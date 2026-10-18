@@ -13,6 +13,12 @@ Changed
 - The U-Boot Python library is now a dependency, from the ``u-boot-pylib``
   package, rather than a copy vendored into binman.
 
+Fixed
+~~~~~
+- A compressed section is no longer cut short when updating the devicetree
+  with ``-u`` changes its compressed size. This happened with a compressed
+  ``u-boot`` entry, whose devicetree is updated, and made the image unusable.
+
 0.1.2 - 2026-10-10
 ------------------
 
