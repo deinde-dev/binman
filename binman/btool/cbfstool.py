@@ -186,6 +186,29 @@ class Bintoolcbfstool(bintool.Bintool):
             ]
         return self.run_cmd(*args)
 
+    def add_payload(self, cbfs_fname, name, fname, compress='lzma'):
+        """Add an ELF file as a payload to the CBFS
+
+        cbfstool converts the ELF into coreboot's payload format, keeping its
+        segments and entry point.
+
+        Args:
+            cbfs_fname (str): Filename of CBFS to update
+            name (str): Name to use inside the CBFS
+            fname (str): Filename of the ELF file to add
+            compress (str): Compression to use (cbfs_util.COMPRESS_NAMES)
+
+        Returns:
+            str: Tool output
+        """
+        args = [cbfs_fname,
+                'add-payload',
+                '-n', name,
+                '-f', fname,
+                '-c', compress or 'none',
+            ]
+        return self.run_cmd(*args)
+
     def add_flat_binary(self, cbfs_fname, name, fname, load, entry,
                         compress='lzma'):
         """Add a flat binary as a payload to the CBFS

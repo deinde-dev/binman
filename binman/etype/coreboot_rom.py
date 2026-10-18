@@ -4,11 +4,26 @@
 # Entry-type module for a coreboot ROM image
 #
 
+from collections import namedtuple
+
 from binman import elf
 from binman.entry import Entry, EntryArg
 from binman.etype.section import Entry_section
 from dtoc import fdt_util
 from u_boot_pylib import tools
+
+# Types of file which can be added to the CBFS
+FILE_TYPES = ('raw', 'payload', 'flat', 'stage')
+
+# A file to add to the CBFS
+#
+# entry (Entry): Entry providing the data
+# name (str): Name of the file in CBFS
+# ftype (str): Type of file, one of FILE_TYPES
+# compress (str): Compression to use
+# load (int): Load address, for a flat binary
+# entry_addr (int): Entry address, for a flat binary
+CbfsFile = namedtuple('CbfsFile', 'entry,name,ftype,compress,load,entry_addr')
 
 class Entry_coreboot_rom(Entry_section):
     """Coreboot ROM image, updated to contain the given payload
@@ -60,6 +75,56 @@ class Entry_coreboot_rom(Entry_section):
     The load and entry addresses are taken from the u-boot-spl ELF, so they
     do not need to be specified here.
 
+    Adding files
+    ~~~~~~~~~~~~
+
+    Instead of building a single payload, each subnode can be added to the
+    CBFS as a file of its own, by giving it a 'cbfs-name' property. This
+    works with any payload and other files, such as SeaBIOS and its VGA
+    ROM. If any subnode has 'cbfs-name' then all of them must have it. The
+    properties of each subnode are:
+
+        - cbfs-name: Name of the file in CBFS. Any existing file of this name
+            is removed first
+        - cbfs-type: Type of file:
+
+            raw
+                The data is added as it is (this is the default)
+            payload
+                The data must be an ELF file, which cbfstool converts to a
+                payload, keeping its segments and entry point
+            flat
+                The data is added as a flat-binary payload, loaded to
+                'cbfs-load-addr', with execution starting at
+                'cbfs-entry-addr' (which defaults to the load address)
+            stage
+                The data must be an ELF file, which cbfstool adds as a stage
+
+        - cbfs-compress: Compression to use ("lzma", "lz4" or "none"). This
+            defaults to "lzma" for payloads and "none" for raw files. It does
+            not apply to stages
+
+    For example, to boot SeaBIOS on coreboot, with a file to configure it::
+
+        rom {
+            filename = "coreboot-seabios.rom";
+            coreboot-rom {
+                coreboot-filename = "coreboot.rom";
+
+                seabios {
+                    type = "blob";
+                    filename = "bios.bin.elf";
+                    cbfs-name = "fallback/payload";
+                    cbfs-type = "payload";
+                };
+                boot-menu-wait {
+                    type = "text";
+                    text = "2000";
+                    cbfs-name = "etc/boot-menu-wait";
+                };
+            };
+        };
+
     Note that binman can already create a CBFS and build images containing
     FSP, microcode, XIP stages and an Intel FIT (see chromebook_coral, for
     example), but those are laid out for U-Boot's own use. Building a
@@ -84,6 +149,28 @@ class Entry_coreboot_rom(Entry_section):
         self._cbfs_entry_addr = fdt_util.GetInt(self._node, 'cbfs-entry-addr')
         self._cbfs_compress = fdt_util.GetString(self._node, 'cbfs-compress',
                                                  'lzma')
+
+        # Subnodes with a 'cbfs-name' are each added as a file of their own
+        self._files = []
+        for entry in self.GetEntries().values():
+            node = entry._node
+            name = fdt_util.GetString(node, 'cbfs-name')
+            if not name:
+                continue
+            ftype = fdt_util.GetString(node, 'cbfs-type', 'raw')
+            if ftype not in FILE_TYPES:
+                entry.Raise(f"Unknown cbfs-type '{ftype}' (use "
+                            f"{', '.join(repr(t) for t in FILE_TYPES)})")
+            compress = fdt_util.GetString(
+                node, 'cbfs-compress', 'none' if ftype == 'raw' else 'lzma')
+            load = fdt_util.GetInt(node, 'cbfs-load-addr')
+            if ftype == 'flat' and load is None:
+                entry.Raise("A flat binary needs 'cbfs-load-addr'")
+            entry_addr = fdt_util.GetInt(node, 'cbfs-entry-addr', load)
+            self._files.append(CbfsFile(entry, name, ftype, compress, load,
+                                        entry_addr))
+        if self._files and len(self._files) != len(self.GetEntries()):
+            self.Raise("Either all subnodes or none must have 'cbfs-name'")
 
     def _FindElfFname(self, entry):
         """Find the ELF filename for an entry, recursing into any subnodes
@@ -161,9 +248,14 @@ class Entry_coreboot_rom(Entry_section):
         Returns:
             bytes: Contents of the ROM (or None if not ready)
         """
-        payload = super().BuildSectionData(required)
-        if payload is None:
-            return None
+        if self._files:
+            contents = [entry.GetData(required) for entry, *_ in self._files]
+            if None in contents:
+                return None
+        else:
+            payload = super().BuildSectionData(required)
+            if payload is None:
+                return None
 
         pathname = tools.get_input_filename(self._coreboot_fname,
                                             self.section.GetAllowMissing())
@@ -173,20 +265,59 @@ class Entry_coreboot_rom(Entry_section):
         uniq = self.GetUniqueName()
         rom_fname = tools.get_output_filename(f'coreboot-rom.{uniq}')
         tools.write_file(rom_fname, tools.read_file(pathname))
-        payload_fname = tools.get_output_filename(f'payload.{uniq}')
-        tools.write_file(payload_fname, payload)
 
-        load_addr, entry_addr = self._GetPayloadAddrs()
+        if self._files:
+            for seq, (cfile, data) in enumerate(zip(self._files, contents)):
+                fname = tools.get_output_filename(f'cbfs-file.{uniq}.{seq}')
+                tools.write_file(fname, data)
+                if not self._AddFile(rom_fname, cfile, fname, data):
+                    self.record_missing_bintool(self.cbfstool)
+                    return tools.get_bytes(0, 1024)
+        else:
+            payload_fname = tools.get_output_filename(f'payload.{uniq}')
+            tools.write_file(payload_fname, payload)
 
-        # The coreboot image may or may not already have a payload
-        self.cbfstool.remove(rom_fname, self._cbfs_name)
-        if self.cbfstool.add_flat_binary(
-                rom_fname, self._cbfs_name, payload_fname,
-                load_addr, entry_addr, self._cbfs_compress) is None:
-            self.record_missing_bintool(self.cbfstool)
-            return tools.get_bytes(0, 1024)
+            load_addr, entry_addr = self._GetPayloadAddrs()
+
+            # The coreboot image may or may not already have a payload
+            self.cbfstool.remove(rom_fname, self._cbfs_name)
+            if self.cbfstool.add_flat_binary(
+                    rom_fname, self._cbfs_name, payload_fname,
+                    load_addr, entry_addr, self._cbfs_compress) is None:
+                self.record_missing_bintool(self.cbfstool)
+                return tools.get_bytes(0, 1024)
 
         return tools.read_file(rom_fname)
+
+    def _AddFile(self, rom_fname, cfile, fname, data):
+        """Add a file to the CBFS in the ROM, replacing any of the same name
+
+        Args:
+            rom_fname (str): Filename of the ROM to update
+            cfile (CbfsFile): File to add
+            fname (str): Filename holding the file's data
+            data (bytes): The file's data
+
+        Returns:
+            bool: True if the file was added, False if cbfstool is missing
+        """
+        if cfile.ftype in ('payload', 'stage') and data[:4] != b'\x7fELF':
+            cfile.entry.Raise(
+                f"cbfs-type '{cfile.ftype}' needs an ELF file")
+        self.cbfstool.remove(rom_fname, cfile.name)
+        if cfile.ftype == 'raw':
+            out = self.cbfstool.add_raw(rom_fname, cfile.name, fname,
+                                        cfile.compress)
+        elif cfile.ftype == 'payload':
+            out = self.cbfstool.add_payload(rom_fname, cfile.name, fname,
+                                            cfile.compress)
+        elif cfile.ftype == 'flat':
+            out = self.cbfstool.add_flat_binary(
+                rom_fname, cfile.name, fname, cfile.load, cfile.entry_addr,
+                cfile.compress)
+        else:
+            out = self.cbfstool.add_stage(rom_fname, cfile.name, fname)
+        return out is not None
 
     def SetImagePos(self, image_pos):
         """Set the position in the image
