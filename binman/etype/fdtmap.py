@@ -122,7 +122,7 @@ class Entry_fdtmap(Entry):
         # fdtmap for this image.
         if data is None:
             # Get the FDT data into an Fdt object
-            data = state.GetFdtContents()[1]
+            data = state.GetMainFdtContents()
             infdt = Fdt.FromData(data)
             infdt.Scan()
 

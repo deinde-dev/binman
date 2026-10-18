@@ -32,6 +32,7 @@ class Entry_blob_dtb(Entry_blob):
 
         super().__init__(section, etype, node)
         self.prepend = None
+        self._from_state = True
 
     def ReadNode(self):
         super().ReadNode()
@@ -43,18 +44,27 @@ class Entry_blob_dtb(Entry_blob):
     def ObtainContents(self, fake_size=0):
         """Get the device-tree from the list held by the 'state' module
 
+        In U-Boot mode the 'state' module holds U-Boot's devicetrees. Otherwise
+        it does not, so the devicetree is read from the input directories like
+        any other blob.
+
         Raises:
             FileNotFoundError: If the device-tree blob is not found.
         """
         self._filename = self.GetDefaultFilename()
         self._pathname, _ = self.FdtContents(self.GetFdtEtype())
         if self._pathname is None:
+            if not state.u_boot_mode:
+                self._from_state = False
+                return super().ObtainContents(fake_size)
             raise FileNotFoundError(errno.ENOENT, # pragma: no cover
                                     os.strerror(errno.ENOENT), self._filename)
         return super().ReadBlobContents()
 
     def ProcessContents(self):
         """Re-read the DTB contents so that we get any calculated properties"""
+        if not self._from_state:
+            return super().ProcessContents()
         _, indata = self.FdtContents(self.GetFdtEtype())
 
         if self.compress == 'zstd' and self.prepend != 'length':

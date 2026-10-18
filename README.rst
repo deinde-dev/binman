@@ -56,10 +56,17 @@ The ``binman`` command is then on your path.
 Quick start
 -----------
 
-Build an image from the description in a devicetree, taking the input files
-from the current directory::
+Build the images described in a devicetree, taking the input files from the
+current directory::
 
-    binman build -d u-boot.dtb
+    binman build -d image.dts -I .
+
+When run in a U-Boot build directory, or with one as an input directory,
+binman treats the devicetree as U-Boot's own, updating it with the image
+layout. To package U-Boot's binaries which have been copied elsewhere, select
+the u-boot project::
+
+    binman --project u-boot build -u -d u-boot.dtb -I .
 
 List the contents of an existing image::
 

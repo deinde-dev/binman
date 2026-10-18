@@ -15,6 +15,18 @@ Added
   a raw file, an ELF payload, a flat binary or a stage. This allows payloads
   other than U-Boot, such as SeaBIOS, and extra files such as configuration.
 
+Changed
+~~~~~~~
+- The devicetree holding the image description is only treated as U-Boot's
+  own when building for U-Boot. Binman detects a U-Boot build directory, by
+  its ``u-boot.cfg`` file, and the new ``--project`` option overrides this
+  choice. Otherwise U-Boot's devicetree entries are read from the input
+  directories like other files, SPL, TPL and VPL devicetrees are not picked
+  up, bootph properties are not propagated and the output devicetree is
+  named after the input, e.g. ``image.dtb.out``. Use ``--project u-boot`` to
+  package a U-Boot build from outside its build directory. See 'U-Boot mode'
+  in the documentation.
+
 0.1.3 - 2026-10-18
 ------------------
 

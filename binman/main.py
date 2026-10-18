@@ -111,9 +111,10 @@ def RunBinman(args):
     if not args.debug:
         sys.tracebacklimit = 0
 
-    # Provide a default toolpath in the hope of finding a mkimage built from
-    # current source
-    if not args.toolpath:
+    # When running the tests within U-Boot, provide a default toolpath in the
+    # hope of finding a mkimage built from current source. For other commands
+    # this depends on the project (see control.ChooseProject())
+    if not args.toolpath and args.cmd == 'test':
         args.toolpath = ['./tools', 'build-sandbox/tools']
 
     if args.cmd == 'test':

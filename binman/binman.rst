@@ -254,6 +254,46 @@ using an ELF file, e.g. `bl31.elf` and splitting it into separate pieces (with
 `fit,operation = "split-elf"`), each with its own load address.
 
 
+.. _`U-Boot mode`:
+
+U-Boot mode
+~~~~~~~~~~~
+
+Binman builds images for a project, chosen with the ``--project`` option:
+
+u-boot
+    The devicetree holding the image description is U-Boot's own
+
+base
+    Nothing project-specific: the devicetree is just a description of the
+    images
+
+Binman chooses ``u-boot`` when it runs in a U-Boot build directory, i.e. when
+the current directory or one of the input directories has a ``u-boot.cfg``
+file, as U-Boot's build always creates. The ``-b`` option also selects
+``u-boot``. Otherwise binman chooses ``base``. So U-Boot's build needs no
+option, and the ``--project`` option is only needed to override this choice.
+Use ``-v2`` to see when binman detects a U-Boot build directory.
+
+In U-Boot mode:
+
+- The devicetree is used as U-Boot's devicetree (``u-boot.dtb``), so the
+  ``u-boot-dtb`` entry holds it, updated with the image layout when ``-u`` is
+  given, so that U-Boot can find the parts of the image at run time
+- The SPL, TPL and VPL devicetrees (``spl/u-boot-spl.dtb``, etc.) are picked
+  up from the input directories and updated in the same way
+- The ``bootph-all`` and ``bootph-some-ram`` properties are propagated from
+  each node to its parents, as the bootph schema requires
+- The default toolpath includes ``./tools`` and ``build-sandbox/tools``, to
+  find a ``mkimage`` built from the current source
+
+With ``base``, devicetree entries such as ``u-boot-dtb`` are read from the
+input directories like any other file, and the output devicetree is named
+after the input, e.g. ``image.dtb.out`` for ``image.dts``. Binman warns if the
+images hold U-Boot's devicetree when ``-u`` is given, since it is then not
+updated with the image layout.
+
+
 Invoking binman outside U-Boot
 ------------------------------
 
@@ -276,7 +316,9 @@ While the same input binaries are used in each case, you will of course
 need to create your own binman command line, like that in `cmd_binman` in
 the Makefile. You may find the -I and --toolpath options useful. The
 devicetree file is provided to binman in binary form, so there is no need to
-have access to the original `.dts` sources.
+have access to the original `.dts` sources. Outside U-Boot's build directory,
+use ``--project u-boot`` so that U-Boot's devicetrees are handled in the same
+way (see `U-Boot mode`_).
 
 
 Assembling the image description
@@ -1877,7 +1919,8 @@ Usage::
 
     binman [-h] [-B BUILD_DIR] [-D] [--tooldir TOOLDIR] [-H]
         [--toolpath TOOLPATH] [--blob-dir BLOB_DIR]
-        [--blob-build-dir BLOB_BUILD_DIR] [-T THREADS]
+        [--blob-build-dir BLOB_BUILD_DIR] [--project {base,u-boot}]
+        [-T THREADS]
         [--test-section-timeout]
         [-v VERBOSITY] [-V]
         {build,bintool-docs,entry-docs,ls,extract,replace,sign,test,tool,blob}
@@ -1922,6 +1965,11 @@ Options:
 --blob-build-dir BLOB_BUILD_DIR
     Set the directory to build blobs in (default ``$BINMAN_BLOB_BUILD_DIR`` or
     ``~/.cache/binman/blob-build``). See `Fetching firmware blobs`_.
+
+--project {base,u-boot}
+    Project to build images for. With ``u-boot`` the devicetree is treated as
+    U-Boot's own. The default is ``u-boot`` in a U-Boot build directory or with
+    ``-b``, else ``base``. See `U-Boot mode`_.
 
 -T THREADS, --threads THREADS
     Number of threads to use (0=single-thread). Note that -T0 is useful for

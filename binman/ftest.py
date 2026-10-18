@@ -389,7 +389,7 @@ class TestFunctional(unittest.TestCase):
                     allow_fake_blobs=False, extra_indirs=None, threads=None,
                     test_section_timeout=False, update_fdt_in_elf=None,
                     force_missing_bintools='', ignore_missing=False, output_dir=None,
-                    blob_dir=None):
+                    blob_dir=None, project='u-boot'):
         """Run binman with a given test file
 
         Args:
@@ -425,11 +425,13 @@ class TestFunctional(unittest.TestCase):
             output_dir: Specific output directory to use for image using -O
             blob_dir: Directory to cache blobs in (--blob-dir), to keep
                 fetched blobs out of the user's own
+            project: Project to build images for (--project), 'u-boot' as
+                for most tests, or None to let binman choose
 
         Returns:
             int return code, 0 on success
         """
-        args = []
+        args = ['--project', project] if project else []
         if debug:
             args.append('-D')
         if verbosity is not None:
@@ -526,7 +528,8 @@ class TestFunctional(unittest.TestCase):
     def _DoReadFileDtb(self, fname, use_real_dtb=False, use_expanded=False,
                        verbosity=None, allow_fake_blobs=True, map=False,
                        update_dtb=False, entry_args=None, reset_dtbs=True,
-                       extra_indirs=None, threads=None, blob_dir=None):
+                       extra_indirs=None, threads=None, blob_dir=None,
+                       project='u-boot'):
         """Run binman and return the resulting image
 
         This runs binman with a given test file and then reads the resulting
@@ -559,13 +562,16 @@ class TestFunctional(unittest.TestCase):
                 single-threaded)
             blob_dir: Directory to cache blobs in (--blob-dir), to keep
                 fetched blobs out of the user's own
+            project: Project to build images for (--project), 'u-boot' as
+                for most tests, or None to let binman choose
 
         Returns:
             Tuple:
                 Resulting image contents
                 Device tree contents
                 Map data showing contents of image (or None if none)
-                Output device tree binary filename ('u-boot.dtb' path)
+                Output device tree binary filename ('u-boot.dtb' path, or
+                    named after the test file if not building for U-Boot)
         """
         dtb_data = None
         # Use the compiled test file as the u-boot-dtb input
@@ -585,9 +591,13 @@ class TestFunctional(unittest.TestCase):
                     entry_args=entry_args, use_real_dtb=use_real_dtb,
                     use_expanded=use_expanded, verbosity=verbosity,
                     allow_fake_blobs=allow_fake_blobs, extra_indirs=extra_indirs,
-                    threads=threads, blob_dir=blob_dir)
+                    threads=threads, blob_dir=blob_dir, project=project)
             self.assertEqual(0, retcode)
-            out_dtb_fname = tools.get_output_filename('u-boot.dtb.out')
+            if state.u_boot_mode:
+                out_name = 'u-boot.dtb'
+            else:
+                out_name = os.path.splitext(os.path.basename(fname))[0] + '.dtb'
+            out_dtb_fname = tools.get_output_filename(f'{out_name}.out')
 
             # Find the (only) image, read it and return its contents
             image = control.images['image']
@@ -9150,6 +9160,114 @@ fdt         fdtmap                Extract the devicetree blob from the fdtmap
                       "Parent node is missing 'bootph-all' property")
         self.assertEqual(len(subnode4.props), 0,
                         "subnode shouldn't have any properties")
+
+    def testPlainMode(self):
+        """Test building images without U-Boot mode
+
+        The devicetree is just a description of the image, so a u-boot-dtb
+        entry reads u-boot.dtb from the input directories like any other blob
+        and SPL's devicetree is not used. The description is still updated
+        with the image layout, for the fdtmap.
+        """
+        with terminal.capture() as (_, stderr):
+            data, _, _, out_dtb_fname = self._DoReadFileDtb(
+                'fdt/plain.dts', update_dtb=True, project='base')
+        self.assertIn("Images include U-Boot's devicetree, which is not "
+                      'updated', stderr.getvalue())
+        self.assertEqual(U_BOOT_DATA + U_BOOT_DTB_DATA,
+                         data[:len(U_BOOT_DATA + U_BOOT_DTB_DATA)])
+
+        # The output devicetree is named after the description
+        self.assertTrue(os.path.exists(out_dtb_fname))
+        for fname in ['u-boot.dtb.out', 'u-boot-spl.dtb.out']:
+            self.assertFalse(os.path.exists(tools.get_output_filename(fname)))
+
+        # The fdtmap holds the layout from the description
+        fdtmap_data = data[len(U_BOOT_DATA + U_BOOT_DTB_DATA):]
+        self.assertEqual(b'_FDTMAP_', fdtmap_data[:8])
+        dtb = fdt.Fdt.FromData(fdtmap_data[16:])
+        dtb.Scan()
+        props = self._GetPropTree(dtb, ['offset', 'size'], prefix='/')
+        self.assertEqual(len(U_BOOT_DATA), props['u-boot-dtb:offset'])
+        self.assertEqual(len(U_BOOT_DTB_DATA), props['u-boot-dtb:size'])
+
+    def testPlainModeNoUBootDtb(self):
+        """Test that there is no warning without U-Boot's devicetree"""
+        with terminal.capture() as (_, stderr):
+            self._DoReadFileDtb('fdt/plain_section.dts', update_dtb=True,
+                                project='base')
+        self.assertNotIn("U-Boot's devicetree", stderr.getvalue())
+
+    def testPlainModeNestedUBootDtb(self):
+        """Test the warning for U-Boot's devicetree within a section
+
+        With expanded entries, U-Boot's devicetree is part of the u-boot
+        entry, here within a section
+        """
+        with terminal.capture() as (_, stderr):
+            self._DoReadFileDtb('fdt/plain_section.dts', update_dtb=True,
+                                use_expanded=True, project='base')
+        self.assertIn("Images include U-Boot's devicetree", stderr.getvalue())
+
+    def testPlainModeBootph(self):
+        """Test that bootph properties are only propagated for U-Boot"""
+        _, _, _, out_dtb_fname = self._DoReadFileDtb(
+                'fdt/bootph_prop.dts', use_real_dtb=True, update_dtb=True,
+                project='base')
+        dtb = fdt.Fdt(out_dtb_fname)
+        dtb.Scan()
+        parent_node = dtb.GetRoot().FindNode('dummy-parent')
+        self.assertNotIn('bootph-all', parent_node.props)
+        self.assertNotIn('bootph-some-ram', parent_node.props)
+
+    def testBoardImpliesUBoot(self):
+        """Test that -b selects the u-boot project unless one is given"""
+        args = cmdline.ParseArgs(['build', '-b', 'sandbox'])
+        self.assertEqual('u-boot', args.project)
+        args = cmdline.ParseArgs(['--project', 'base', 'build', '-b',
+                                  'sandbox'])
+        self.assertEqual('base', args.project)
+        args = cmdline.ParseArgs(['build', '-d', 'image.dtb'])
+        self.assertIsNone(args.project)
+
+    def _SetupUBootBuildDir(self):
+        """Set up an input directory which looks like a U-Boot build
+
+        Returns:
+            str: Path to the directory
+        """
+        build_dir = os.path.join(self._indir, 'uboot-build')
+        os.makedirs(build_dir, exist_ok=True)
+        tools.write_file(os.path.join(build_dir, 'u-boot.cfg'), b'')
+        return build_dir
+
+    def testProjectDetect(self):
+        """Test detecting a U-Boot build directory"""
+        build_dir = self._SetupUBootBuildDir()
+        with terminal.capture() as (stdout, stderr):
+            _, _, _, out_dtb_fname = self._DoReadFileDtb(
+                'fdt/plain.dts', use_real_dtb=True, update_dtb=True,
+                verbosity=2, extra_indirs=[build_dir], project=None)
+        self.assertEqual('u-boot', state.project)
+        self.assertIn(f"Building for U-Boot, since '{build_dir}' is a U-Boot "
+                      'build directory', stdout.getvalue())
+        self.assertEqual('u-boot.dtb.out', os.path.basename(out_dtb_fname))
+        self.assertNotIn("U-Boot's devicetree", stderr.getvalue())
+
+    def testProjectOverride(self):
+        """Test that --project overrides detection of a U-Boot build"""
+        build_dir = self._SetupUBootBuildDir()
+        with terminal.capture() as (_, stderr):
+            self._DoReadFileDtb('fdt/plain.dts', update_dtb=True,
+                                extra_indirs=[build_dir], project='base')
+        self.assertEqual('base', state.project)
+        self.assertIn("Images include U-Boot's devicetree", stderr.getvalue())
+
+    def testProjectDefault(self):
+        """Test that the base project is used outside a U-Boot build"""
+        with terminal.capture():
+            self._DoReadFileDtb('fdt/plain.dts', update_dtb=True, project=None)
+        self.assertEqual('base', state.project)
 
     def testBlobList(self):
         """Test listing blob types"""

@@ -42,6 +42,10 @@ images = OrderedDict()
 #    value: Text for the help
 missing_blob_help = {}
 
+# Entry types holding U-Boot's devicetrees
+U_BOOT_DTB_ETYPES = {'u-boot-dtb', 'u-boot-spl-dtb', 'u-boot-tpl-dtb',
+                     'u-boot-vpl-dtb'}
+
 def _ReadImageDesc(binman_node, use_expanded):
     """Read the image descriptions from the /binman node
 
@@ -584,6 +588,22 @@ def scan_and_prop_bootph(node):
         changed |= scan_and_prop_bootph(subnode)
     return changed
 
+def _HasUBootDtb(section):
+    """Check if a section holds any of U-Boot's devicetrees
+
+    Args:
+        section (Entry_section): Section to check, including its subsections
+
+    Returns:
+        bool: True if a U-Boot devicetree is present
+    """
+    for entry in section.GetEntries().values():
+        if entry.etype in U_BOOT_DTB_ETYPES:
+            return True
+        if entry.GetEntries() and _HasUBootDtb(entry):
+            return True
+    return False
+
 def PrepareImagesAndDtbs(dtb_fname, select_images, update_fdt, use_expanded, indir):
     """Prepare the images to be processed and select the device tree
 
@@ -619,8 +639,14 @@ def PrepareImagesAndDtbs(dtb_fname, select_images, update_fdt, use_expanded, ind
     # in binman.
     if indir is None:
         indir = []
+    # Name the output devicetree after the input, e.g. 'image.dtb' for
+    # 'image.dts', except for U-Boot, whose devicetree is always u-boot.dtb
+    if state.u_boot_mode:
+        base = 'u-boot.dtb'
+    else:
+        base = os.path.splitext(os.path.basename(dtb_fname))[0] + '.dtb'
     dtb_fname = fdt_util.EnsureCompiled(dtb_fname, indir=indir)
-    fname = tools.get_output_filename('u-boot.dtb.out')
+    fname = tools.get_output_filename(f'{base}.out')
     tools.write_file(fname, tools.read_file(dtb_fname))
     dtb = fdt.FdtScan(fname)
 
@@ -631,7 +657,7 @@ def PrepareImagesAndDtbs(dtb_fname, select_images, update_fdt, use_expanded, ind
 
     if _ProcessTemplates(node):
         dtb.Sync(True)
-        fname = tools.get_output_filename('u-boot.dtb.tmpl1')
+        fname = tools.get_output_filename(f'{base}.tmpl1')
         tools.write_file(fname, dtb.GetContents())
 
         _RemoveTemplates(node)
@@ -640,10 +666,10 @@ def PrepareImagesAndDtbs(dtb_fname, select_images, update_fdt, use_expanded, ind
         # Rescan the dtb to pick up the new phandles
         dtb.Scan()
         node = _FindBinmanNode(dtb)
-        fname = tools.get_output_filename('u-boot.dtb.tmpl2')
+        fname = tools.get_output_filename(f'{base}.tmpl2')
         tools.write_file(fname, dtb.GetContents())
 
-    if scan_and_prop_bootph(dtb.GetRoot()):
+    if state.u_boot_mode and scan_and_prop_bootph(dtb.GetRoot()):
         dtb.Sync(True)
 
     images = _ReadImageDesc(node, use_expanded)
@@ -679,6 +705,14 @@ def PrepareImagesAndDtbs(dtb_fname, select_images, update_fdt, use_expanded, ind
         dtb_item.Sync(auto_resize=True)
         dtb_item.Pack()
         dtb_item.Flush()
+
+    # Without U-Boot mode, U-Boot's devicetrees are just files, so they do not
+    # get the image layout. This is likely a mistake if U-Boot reads it.
+    if (update_fdt and not state.u_boot_mode and
+            any(_HasUBootDtb(image) for image in images.values())):
+        tout.warning("Images include U-Boot's devicetree, which is not "
+                     'updated with the image layout unless building for '
+                     'U-Boot (--project u-boot)')
     return images
 
 def CheckForProblems(image):
@@ -821,6 +855,32 @@ def ProcessImage(image, update_fdt, write_map, get_contents=True,
 
     return has_problems
 
+def ChooseProject(args):
+    """Choose the project to build images for
+
+    This is the project given by --project, if any. Otherwise it is 'u-boot'
+    when running in a U-Boot build directory, i.e. when the current directory
+    or an input directory has a u-boot.cfg file, else 'base'
+
+    Args:
+        args (Namespace): Command-line arguments
+
+    Returns:
+        tuple:
+            str: Project name, 'base' or 'u-boot'
+            str: U-Boot build directory which was detected, or None
+    """
+    if args.project:
+        return args.project, None
+    # This is a list for 'build' but a single directory for 'replace'
+    indirs = getattr(args, 'indir', None) or []
+    if isinstance(indirs, str):
+        indirs = [indirs]
+    for dirname in ['.'] + indirs:
+        if os.path.exists(os.path.join(dirname, 'u-boot.cfg')):
+            return 'u-boot', dirname
+    return 'base', None
+
 def Binman(args):
     """The main control code for binman
 
@@ -842,9 +902,14 @@ def Binman(args):
     from binman.image import Image
     from binman import state
 
+    project, detected = ChooseProject(args)
+
     tool_paths = []
     if args.toolpath:
         tool_paths += args.toolpath
+    elif project == 'u-boot':
+        # Look for a mkimage built from the current source
+        tool_paths += ['./tools', 'build-sandbox/tools']
     if args.tooldir:
         tool_paths.append(args.tooldir)
     tools.set_tool_paths(tool_paths or None)
@@ -967,6 +1032,10 @@ def Binman(args):
         elf.debug = args.debug
         cbfs_util.VERBOSE = args.verbosity > tout.NOTICE
         state.use_fake_dtb = args.fake_dtb
+        state.SetProject(project)
+        if detected:
+            tout.notice(f"Building for U-Boot, since '{detected}' is a U-Boot "
+                        'build directory')
 
         # Normally we replace the 'u-boot' etype with 'u-boot-expanded', etc.
         # When running tests this can be disabled using this flag. When not
@@ -1007,7 +1076,7 @@ def Binman(args):
                 tools.write_file(dtb_item._fname, dtb_item.GetContents())
 
             if elf_params:
-                data = state.GetFdtForEtype('u-boot-dtb').GetContents()
+                data = state.GetMainFdt().GetContents()
                 elf.UpdateFile(*elf_params, data)
 
             bintool.Bintool.set_missing_list(None)
