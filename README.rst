@@ -1,3 +1,7 @@
+.. image:: https://raw.githubusercontent.com/deinde-dev/binman/master/logo/binman-logo-primary.png
+   :alt: Binman
+   :width: 400px
+
 Binman firmware packager
 ========================
 

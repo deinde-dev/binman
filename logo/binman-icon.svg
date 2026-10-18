@@ -1,0 +1,26 @@
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t">
+  <title id="t">binman icon</title>
+
+  <!-- firmware image tile -->
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="#12161C"/>
+
+  <!-- a ruler, marking the offsets in the image -->
+  <rect x="70.7" y="54.7" width="4" height="149.3" rx="2" fill="#8B949E"/>
+  <rect x="53.3" y="52.7" width="18.7" height="4" rx="2" fill="#8B949E"/>
+  <rect x="61.3" y="71.3" width="10.7" height="4" rx="2" fill="#6E7681"/>
+  <rect x="53.3" y="90" width="18.7" height="4" rx="2" fill="#8B949E"/>
+  <rect x="61.3" y="108.7" width="10.7" height="4" rx="2" fill="#6E7681"/>
+  <rect x="53.3" y="127.3" width="18.7" height="4" rx="2" fill="#8B949E"/>
+  <rect x="61.3" y="146" width="10.7" height="4" rx="2" fill="#6E7681"/>
+  <rect x="53.3" y="164.7" width="18.7" height="4" rx="2" fill="#8B949E"/>
+  <rect x="61.3" y="183.3" width="10.7" height="4" rx="2" fill="#6E7681"/>
+  <rect x="53.3" y="202" width="18.7" height="4" rx="2" fill="#8B949E"/>
+
+  <!-- entries packed into the image: the middle one is a section holding
+       entries of its own, since images are hierarchical -->
+  <rect x="88" y="55" width="117" height="27" rx="11" fill="#58A6FF"/>
+  <rect x="88" y="89" width="117" height="88" rx="13" fill="#3FB950"/>
+  <rect x="99" y="100" width="96" height="29" rx="9" fill="#D29922"/>
+  <rect x="99" y="137" width="67" height="29" rx="9" fill="#BC8CFF"/>
+  <rect x="88" y="185" width="53" height="19" rx="9" fill="#F778BA"/>
+</svg>
