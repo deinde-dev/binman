@@ -33,7 +33,9 @@ they require, then use binman to stitch everything together into an image. It:
   devicetree description of the image;
 - inspects existing images, extracting and replacing their contents and
   repacking where needed;
-- copes with missing binary blobs and fetches the external tools it needs.
+- copes with missing binary blobs and fetches the external tools it needs;
+- fetches firmware blobs such as TF-A, building them from source where it can,
+  and keeps them in a cache.
 
 Binman is designed primarily for use with U-Boot and associated binaries such
 as ARM Trusted Firmware, but is general enough to be used with other projects.
@@ -67,6 +69,12 @@ Binman runs external tools for some entry types. To install any which are
 missing::
 
     binman tool -f missing
+
+Fetch a firmware blob, here TF-A's BL31 for an Allwinner A64 board, building
+it from source::
+
+    binman blob -f arm,trusted-firmware-a --version 2.12 --arch aarch64 \
+        --plat sun50i_a64
 
 See ``binman -H`` for the complete manual, or the documentation linked below.
 

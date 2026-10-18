@@ -2175,6 +2175,68 @@ Options:
     Fetch a bintool from a known location. Use `all` to fetch all and `missing`
     to fetch any missing tools.
 
+binman blob
+-----------
+
+This fetches firmware blobs and manages the blob cache. See
+`Fetching firmware blobs`_.
+
+Usage::
+
+    binman blob [-h] [-l] [--list-stores] [--info COMPATIBLE]
+        [-f COMPATIBLE] [--add COMPATIBLE] [--file FILE]
+        [--version VERSION] [--arch ARCH] [--plat PLAT]
+        [--source-only] [--no-source] [--temp-build]
+        [--clean-builds]
+
+Options:
+
+-h, --help
+    show help message and exit
+
+-l, --list
+    List all known blob types
+
+--list-stores
+    List all configured blob stores
+
+--info COMPATIBLE
+    Show information about a blob type, such as its stores
+
+-f COMPATIBLE, --fetch COMPATIBLE
+    Fetch a blob by compatible string, using the cache if it is there. This
+    needs ``--version``, ``--arch`` and ``--plat``, unless the blob type lists
+    the files it provides (see `Blobs for a board`_)
+
+--add COMPATIBLE
+    Add a blob file to the cache, given by ``--file``, along with
+    ``--version``, ``--arch`` and ``--plat``
+
+--file FILE
+    Input file path (for ``--add``)
+
+--version VERSION
+    Version of the blob, e.g. 2.12
+
+--arch ARCH
+    Target architecture, e.g. aarch64
+
+--plat PLAT
+    Target platform, e.g. sun50i_a64
+
+--source-only
+    Only try building from source
+
+--no-source
+    Don't try building from source
+
+--temp-build
+    Build in a temporary directory which is removed afterwards, rather than
+    in the blob build directory
+
+--clean-builds
+    Remove all blob builds
+
 
 Technical details
 =================
