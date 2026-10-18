@@ -54,6 +54,10 @@ bintool references are generated from the docstrings in ``binman/etype/`` and
 ``binman/btool/``. ``doc/`` only wraps these for Sphinx, so edit the manual
 and docstrings there.
 
+``doc/demo/record.sh`` records the short video of binman in a terminal which
+is shown at https://deinde.dev/binman/. Run it again after a change to the
+output which the video shows.
+
 Building the package
 --------------------
 
