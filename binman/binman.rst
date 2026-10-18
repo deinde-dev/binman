@@ -519,8 +519,9 @@ Using symbols outside U-Boot
 Any project can use these symbols, not just U-Boot. Binman provides a
 standalone version of U-Boot's ``binman_sym.h`` header, which needs no
 configuration options, in the ``include/`` directory of the binman package
-(``binman/include/binman_sym.h`` in the source). To find it in an installed
-copy of binman::
+(``binman/include/binman_sym.h`` in the source). It is dual-licensed under
+GPL-2.0+ or BSD-3-Clause, so that projects under either licence can include it.
+To find it in an installed copy of binman::
 
     python3 -c "import binman, os; print(os.path.join(os.path.dirname(binman.__file__), 'include'))"
 
