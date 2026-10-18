@@ -2621,7 +2621,8 @@ file there can provide a new entry type or take the place of an existing one::
 
 Use ``-v2`` to see which entry types binman loads this way. This is intended for
 development: once an entry type works, please send it to binman so that others
-can use it.
+can use it. See 'Developing entry types' in binman's documentation for how to
+write an entry type, try it and add it to binman.
 
 Entry properties are documented in entry.py. The entry subclasses are free
 to change the values of properties to support special behaviour. For example,

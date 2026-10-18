@@ -39,7 +39,8 @@ Tests which need a missing tool are skipped. Then::
     binman --toolpath <u-boot-build>/tools test -T          # check coverage
 
 The coverage check requires every line of binman to be covered by the
-tests. See ``doc/binman_tests.rst`` for how to write tests.
+tests. See ``doc/binman_tests.rst`` for how to write tests, and
+``doc/etype_dev.rst`` for how to write and add an entry type.
 
 Building the documentation
 --------------------------
@@ -51,8 +52,9 @@ Building the documentation
 
 The manual itself lives in ``binman/binman.rst`` and the entry-type and
 bintool references are generated from the docstrings in ``binman/etype/`` and
-``binman/btool/``. ``doc/`` only wraps these for Sphinx, so edit the manual
-and docstrings there.
+``binman/btool/``. ``doc/`` mostly wraps these for Sphinx, so edit the manual
+and docstrings there. The guide to developing entry types,
+``doc/etype_dev.rst``, is the exception.
 
 ``doc/demo/record.sh`` records the short video of binman in a terminal which
 is shown at https://deinde.dev/binman/. Run it again after a change to the
