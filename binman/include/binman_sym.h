@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0+ OR BSD-3-Clause */
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Symbol access for symbols set up by binman as part of the build.
  *
@@ -7,9 +7,6 @@
  * include/binman_sym.h, for use in any project: it needs no configuration
  * options. See 'Access to binman entry offsets at run time (symbols)' in the
  * binman documentation for how binman fills in these symbols.
- *
- * Unlike the rest of binman, this header is dual-licensed, so that projects
- * under either licence can include it.
  *
  * Copyright (c) 2017 Google, Inc
  */
