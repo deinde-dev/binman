@@ -913,6 +913,7 @@ def Binman(args):
     if args.tooldir:
         tool_paths.append(args.tooldir)
     tools.set_tool_paths(tool_paths or None)
+    entry.SetEtypeDirs(args.etype_dir)
     bintool.Bintool.set_tool_dir(args.tooldir)
 
     # Images may need blobs from the cache, so set it up for all commands

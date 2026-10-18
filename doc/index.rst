@@ -15,5 +15,6 @@ There is a short introduction, with a demo, at https://deinde.dev/binman/
    :maxdepth: 2
 
    binman
+   etype_dev
    binman_tests
    changelog
