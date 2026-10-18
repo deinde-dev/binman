@@ -8,6 +8,13 @@ the project follows `Semantic Versioning <https://semver.org/>`_.
 Unreleased
 ----------
 
+Added
+~~~~~
+- The ``coreboot-rom`` entry type can add each of its subnodes to the CBFS
+  as a file of its own, given by ``cbfs-name``, with ``cbfs-type`` selecting
+  a raw file, an ELF payload, a flat binary or a stage. This allows payloads
+  other than U-Boot, such as SeaBIOS, and extra files such as configuration.
+
 0.1.3 - 2026-10-18
 ------------------
 
