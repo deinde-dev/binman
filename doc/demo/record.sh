@@ -136,7 +136,7 @@ say() {
 	run "# $1" 0.8
 }
 
-BUILD="binman build -u -d image.dts -I . -O out -a atf-bl31-path=bl31.bin"
+BUILD="binman --project u-boot build -u -d image.dts -I . -O out -a atf-bl31-path=bl31.bin"
 BLOB=arm,trusted-firmware-a
 
 say "An image holding U-Boot and TF-A, described in a devicetree"

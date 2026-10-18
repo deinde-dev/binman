@@ -42,6 +42,16 @@ fdt_path_prefix = ''
 # Arguments passed to binman to provide arguments to entries
 entry_args = {}
 
+# Project which images are being built for, 'base' or 'u-boot'. See
+# SetProject()
+project = 'base'
+
+# True when building for U-Boot, where the devicetree holding the image
+# description is U-Boot's own (u-boot.dtb), along with any SPL, TPL and VPL
+# devicetrees in the input directories. Otherwise the devicetree is just a
+# description of the images
+u_boot_mode = False
+
 # True to use fake device-tree files for testing (see U_BOOT_DTB_DATA in
 # ftest.py)
 use_fake_dtb = False
@@ -117,6 +127,39 @@ def GetFdtPath(etype):
         Full path name to the associated Fdt
     """
     return output_fdt_info[etype][0]._fname
+
+def SetProject(name):
+    """Set the project which images are being built for
+
+    Args:
+        name (str): Project name, 'base' or 'u-boot'. With 'u-boot' the
+            devicetree is treated as U-Boot's own
+    """
+    global project, u_boot_mode
+
+    project = name
+    u_boot_mode = name == 'u-boot'
+
+def GetMainFdt():
+    """Get the devicetree holding the image description
+
+    Returns:
+        Fdt: Devicetree, which is U-Boot's own in U-Boot mode
+    """
+    return main_dtb
+
+def GetMainFdtContents():
+    """Get the contents of the devicetree holding the image description
+
+    In U-Boot mode this is U-Boot's devicetree, which may be a fake one when
+    testing
+
+    Returns:
+        bytes: Contents of the devicetree
+    """
+    if 'u-boot-dtb' in output_fdt_info:
+        return GetFdtContents('u-boot-dtb')[1]
+    return main_dtb.GetContents()
 
 def GetFdtContents(etype='u-boot-dtb'):
     """Looks up the FDT pathname and contents
@@ -211,7 +254,9 @@ def Prepare(images, dtb):
     """Get device tree files ready for use
 
     This sets up a set of device tree files that can be retrieved by
-    GetAllFdts(). This includes U-Boot proper and any SPL device trees.
+    GetAllFdts(). In U-Boot mode this includes U-Boot proper and any SPL
+    device trees. Otherwise it is just the devicetree holding the image
+    description.
 
     Args:
         images: List of images being used
@@ -230,6 +275,8 @@ def Prepare(images, dtb):
     main_dtb = dtb
     output_fdt_info.clear()
     fdt_path_prefix = ''
+    if not u_boot_mode:
+        return
     output_fdt_info['u-boot-dtb'] = [dtb, 'u-boot.dtb']
     if use_fake_dtb:
         for etype, fname in DTB_TYPE_FNAME.items():

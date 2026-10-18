@@ -15,6 +15,9 @@ import pathlib
 BINMAN_DIR = pathlib.Path(__file__).parent
 HAS_TESTS = (BINMAN_DIR / "ftest.py").exists()
 
+# Projects which binman can build images for (see --project)
+PROJECTS = ['base', 'u-boot']
+
 def make_extract_parser(subparsers):
     """make_extract_parser: Make a subparser for the 'extract' command
 
@@ -95,6 +98,11 @@ controlled by a description in the board device tree.'''
     parser.add_argument('--blob-build-dir', type=str,
         help='Set the directory to build blobs in (default '
              '$BINMAN_BLOB_BUILD_DIR or ~/.cache/binman/blob-build)')
+    parser.add_argument('--project', choices=PROJECTS,
+        help="Project to build images for: 'u-boot' treats the devicetree as "
+             "U-Boot's own and 'base' has nothing project-specific. The "
+             "default is 'u-boot' in a U-Boot build directory or with -b, "
+             "else 'base'")
     parser.add_argument('-T', '--threads', type=int,
           default=None, help='Number of threads to use (0=single-thread)')
     parser.add_argument('--test-section-timeout', action='store_true',
@@ -236,4 +244,9 @@ controlled by a description in the board device tree.'''
     blob_parser.add_argument('--clean-builds', action='store_true',
                              help='Remove all blob builds')
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    # A board's build directory is a U-Boot one
+    if getattr(args, 'board', None) and not args.project:
+        args.project = 'u-boot'
+    return args
