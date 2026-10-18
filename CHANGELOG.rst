@@ -8,10 +8,15 @@ the project follows `Semantic Versioning <https://semver.org/>`_.
 Unreleased
 ----------
 
+0.1.3 - 2026-10-18
+------------------
+
 Changed
 ~~~~~~~
 - The U-Boot Python library is now a dependency, from the ``u-boot-pylib``
   package, rather than a copy vendored into binman.
+- The project has moved to the deinde-dev organisation on GitHub, at
+  https://github.com/deinde-dev/binman
 
 Fixed
 ~~~~~
