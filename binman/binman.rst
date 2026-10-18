@@ -513,6 +513,51 @@ filename using `elf-filename` and set 'elf-base-sym' to the base symbol for the
 start of the binary image (this defaults to `__image_copy_start` which is what
 U-Boot uses). See `testBlobSymbol()` for an example.
 
+Using symbols outside U-Boot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Any project can use these symbols, not just U-Boot. Binman provides a
+standalone version of U-Boot's ``binman_sym.h`` header, which needs no
+configuration options, in the ``include/`` directory of the binman package
+(``binman/include/binman_sym.h`` in the source). To find it in an installed
+copy of binman::
+
+    python3 -c "import binman, os; print(os.path.join(os.path.dirname(binman.__file__), 'include'))"
+
+Use the header as above, with ``DECLARE_BINMAN_MAGIC_SYM`` in one source file,
+then add the binary to the image as a blob with ``write-symbols``,
+``elf-filename`` and ``elf-base-sym``, where the base symbol is one which the
+program's linker script defines at the start of the binary. For example::
+
+    my-firmware {
+        type = "blob";
+        filename = "my-firmware.bin";
+        write-symbols;
+        elf-filename = "my-firmware.elf";
+        elf-base-sym = "__start";
+    };
+
+If the ELF file does not have the base symbol, binman writes no symbols.
+
+The interface between the program and binman is:
+
+- Each symbol is named ``_binman_<entry>_prop_<property>``, where ``<entry>``
+  is the name of an entry in the image, with any hyphens changed to
+  underscores, and ``<property>`` is ``offset``, ``image_pos`` or ``size``.
+  Appending ``_any`` to the entry name matches that entry or one with the same
+  name followed by ``-elf``, ``-img`` or ``-nodtb``.
+- Symbols must be 4 or 8 bytes in size. Binman writes the value
+  little-endian, in place, at the symbol's offset from the base symbol.
+- ``offset`` is the entry's offset within its parent section and ``size`` is
+  its size. ``image_pos`` is its position in the image, plus the base address
+  described above.
+- A weak symbol, as declared by ``binman_sym_declare_optional()``, may refer to
+  an entry which does not exist, in which case binman writes -1
+  (``BINMAN_SYM_MISSING``). Otherwise this is an error.
+- Binman writes ``0x4d595342`` ('BSYM' in little-endian) into
+  ``_binman_sym_magic``, so the program can check with ``BINMAN_SYMS_OK`` that
+  the values were filled in.
+
 .. _binman_fdt:
 
 Access to binman entry offsets at run time (fdt)
