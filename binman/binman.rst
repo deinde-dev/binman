@@ -1917,7 +1917,8 @@ Binman commands and arguments
 
 Usage::
 
-    binman [-h] [-B BUILD_DIR] [-D] [--tooldir TOOLDIR] [-H]
+    binman [-h] [-B BUILD_DIR] [-D] [--etype-dir ETYPE_DIR] [-H]
+        [--tooldir TOOLDIR]
         [--toolpath TOOLPATH] [--blob-dir BLOB_DIR]
         [--blob-build-dir BLOB_BUILD_DIR] [--project {base,u-boot}]
         [-T THREADS]
@@ -1951,6 +1952,11 @@ Options:
     Enabling debugging (provides a full traceback on error)
 
 --tooldir TOOLDIR     Set the directory to store tools
+
+--etype-dir ETYPE_DIR
+    Add a directory to search for entry types, before the built-in ones. This
+    is intended for developing entry types (see
+    `Writing new entries and debugging`_)
 
 -H, --full-help
     Display the README file
@@ -2605,6 +2611,17 @@ Each entry type is a separate file in the tools/binman/etype directory. Each
 file contains a class called Entry_<type> where <type> is the entry type.
 New entry types can be supported by adding new files in that directory.
 These will automatically be detected by binman when needed.
+
+While developing an entry type, it can be convenient to keep it outside binman,
+for example to try it with an installed copy of binman. The ``--etype-dir``
+option adds a directory to search for entry types, before binman's own, so a
+file there can provide a new entry type or take the place of an existing one::
+
+    binman --etype-dir ~/my-etypes build -d image.dts
+
+Use ``-v2`` to see which entry types binman loads this way. This is intended for
+development: once an entry type works, please send it to binman so that others
+can use it.
 
 Entry properties are documented in entry.py. The entry subclasses are free
 to change the values of properties to support special behaviour. For example,

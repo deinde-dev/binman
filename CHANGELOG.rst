@@ -14,6 +14,8 @@ Added
   as a file of its own, given by ``cbfs-name``, with ``cbfs-type`` selecting
   a raw file, an ELF payload, a flat binary or a stage. This allows payloads
   other than U-Boot, such as SeaBIOS, and extra files such as configuration.
+- The ``--etype-dir`` option adds a directory to search for entry types,
+  before binman's own, for developing entry types.
 
 Changed
 ~~~~~~~

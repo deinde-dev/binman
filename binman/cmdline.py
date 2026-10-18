@@ -85,6 +85,9 @@ controlled by a description in the board device tree.'''
         help='Directory containing the build output')
     parser.add_argument('-D', '--debug', action='store_true',
         help='Enabling debugging (provides a full traceback on error)')
+    parser.add_argument('--etype-dir', type=str, action='append',
+        help='Add a directory to search for entry types, before the built-in '
+             'ones (for developing entry types)')
     parser.add_argument('-H', '--full-help', action='store_true',
         default=False, help='Display the README file')
     parser.add_argument('--tooldir', type=str,

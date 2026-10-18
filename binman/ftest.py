@@ -389,7 +389,7 @@ class TestFunctional(unittest.TestCase):
                     allow_fake_blobs=False, extra_indirs=None, threads=None,
                     test_section_timeout=False, update_fdt_in_elf=None,
                     force_missing_bintools='', ignore_missing=False, output_dir=None,
-                    blob_dir=None, project='u-boot'):
+                    blob_dir=None, project='u-boot', etype_dirs=None):
         """Run binman with a given test file
 
         Args:
@@ -427,6 +427,7 @@ class TestFunctional(unittest.TestCase):
                 fetched blobs out of the user's own
             project: Project to build images for (--project), 'u-boot' as
                 for most tests, or None to let binman choose
+            etype_dirs: List of extra directories to search for entry types
 
         Returns:
             int return code, 0 on success
@@ -447,6 +448,8 @@ class TestFunctional(unittest.TestCase):
             args.append('--test-section-timeout')
         if blob_dir:
             args += ['--blob-dir', blob_dir]
+        for dirname in etype_dirs or []:
+            args += ['--etype-dir', dirname]
         args += ['build', '-p', '-I', self._indir, '-d', self.TestFile(fname)]
         if map:
             args.append('-m')
@@ -1894,6 +1897,26 @@ class TestFunctional(unittest.TestCase):
         data = self._DoReadFile('entry/fill.dts')
         expected = tools.get_bytes(0xff, 8) + tools.get_bytes(0, 8)
         self.assertEqual(expected, data)
+
+    def testEtypeDir(self):
+        """Test loading entry types from an extra directory"""
+        # This has a new entry type and one which takes the place of 'fill'
+        etype_dir = self.TestFile('etype_dir')
+        with terminal.capture() as (stdout, _):
+            self._DoTestFile('entry/etype_dir.dts', etype_dirs=[etype_dir],
+                             verbosity=2)
+        self.assertEqual(b'dev-etype' + b'over',
+                         tools.read_file(tools.get_output_filename('image.bin')))
+        self.assertIn("Using entry type 'dev_etype' from", stdout.getvalue())
+
+        # Without the directory, the built-in fill entry type is used again
+        data = self._DoReadFile('entry/fill.dts')
+        self.assertEqual(tools.get_bytes(0xff, 8) + tools.get_bytes(0, 8), data)
+
+        # and the new entry type is unknown
+        with self.assertRaises(ValueError) as e:
+            self._DoTestFile('entry/etype_dir.dts')
+        self.assertIn("Unknown entry type 'dev-etype'", str(e.exception))
 
     def testFillNoSize(self):
         """Test for an fill entry type with no size"""

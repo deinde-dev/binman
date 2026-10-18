@@ -6,6 +6,7 @@
 
 from collections import namedtuple
 import importlib
+import importlib.util
 import os
 import pathlib
 import sys
@@ -19,6 +20,47 @@ from u_boot_pylib.tools import to_hex, to_hex_size
 from u_boot_pylib import tout
 
 modules = {}
+
+# Extra directories to search for entry types, before binman's own. This is
+# intended for developing entry types (see SetEtypeDirs())
+etype_dirs = []
+
+def SetEtypeDirs(dirs):
+    """Set the extra directories to search for entry types
+
+    Args:
+        dirs (list of str): Directories to search, in order, or None for none
+    """
+    global etype_dirs
+
+    etype_dirs = dirs or []
+    modules.clear()
+
+def _ImportEtype(module_name):
+    """Import the module for an entry type
+
+    This looks in the extra directories first, then in binman's own etype/
+    directory
+
+    Args:
+        module_name (str): Name of module, e.g. 'u_boot'
+
+    Returns:
+        module: Module which was imported
+
+    Raises:
+        ImportError: The module could not be found
+    """
+    for dirname in etype_dirs:
+        fname = os.path.join(dirname, f'{module_name}.py')
+        if os.path.exists(fname):
+            tout.notice(f"Using entry type '{module_name}' from '{fname}'")
+            spec = importlib.util.spec_from_file_location(
+                f'binman.etype.{module_name}', fname)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    return importlib.import_module('binman.etype.' + module_name)
 
 # This is imported if needed
 state = None
@@ -191,12 +233,10 @@ class Entry(object):
             module_name += '_expanded'
         module = modules.get(module_name)
 
-        # Also allow entry-type modules to be brought in from the etype directory.
-
         # Import the module if we have not already done so.
         if not module:
             try:
-                module = importlib.import_module('binman.etype.' + module_name)
+                module = _ImportEtype(module_name)
             except ImportError as e:
                 if expanded:
                     return None
