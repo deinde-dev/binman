@@ -5,8 +5,8 @@
  * Simple program to create some binman symbols. This is used by binman tests.
  */
 
-#include <linux/kconfig.h>
-#include <binman_sym.h>
+/* Use the standalone header, as a project other than U-Boot would */
+#include "../include/binman_sym.h"
 
 DECLARE_BINMAN_MAGIC_SYM;
 
