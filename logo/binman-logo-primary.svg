@@ -1,0 +1,39 @@
+<svg viewBox="0 0 700 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t">
+  <title id="t">binman</title>
+  <defs>
+    <style>
+      .word { font-family: 'JetBrains Mono','SF Mono',ui-monospace,Menlo,Consolas,monospace;
+              font-weight: 700; font-size: 92px; letter-spacing: -3px; fill: #1B2330; }
+    </style>
+  </defs>
+
+  <!-- firmware image tile -->
+  <rect x="30" y="30" width="180" height="180" rx="38" fill="#12161C"/>
+
+  <!-- a ruler, marking the offsets in the image -->
+  <rect x="77" y="65" width="3" height="112" rx="1.5" fill="#8B949E"/>
+  <rect x="64" y="63.5" width="14" height="3" rx="1.5" fill="#8B949E"/>
+  <rect x="70" y="77.5" width="8" height="3" rx="1.5" fill="#6E7681"/>
+  <rect x="64" y="91.5" width="14" height="3" rx="1.5" fill="#8B949E"/>
+  <rect x="70" y="105.5" width="8" height="3" rx="1.5" fill="#6E7681"/>
+  <rect x="64" y="119.5" width="14" height="3" rx="1.5" fill="#8B949E"/>
+  <rect x="70" y="133.5" width="8" height="3" rx="1.5" fill="#6E7681"/>
+  <rect x="64" y="147.5" width="14" height="3" rx="1.5" fill="#8B949E"/>
+  <rect x="70" y="161.5" width="8" height="3" rx="1.5" fill="#6E7681"/>
+  <rect x="64" y="175.5" width="14" height="3" rx="1.5" fill="#8B949E"/>
+
+  <!-- entries packed into the image: the middle one is a section holding
+       entries of its own, since images are hierarchical -->
+  <rect x="90" y="65" width="88" height="20" rx="8" fill="#58A6FF"/>
+  <rect x="90" y="91" width="88" height="66" rx="10" fill="#3FB950"/>
+  <rect x="98" y="99" width="72" height="22" rx="7" fill="#D29922"/>
+  <rect x="98" y="127" width="50" height="22" rx="7" fill="#BC8CFF"/>
+  <rect x="90" y="163" width="40" height="14" rx="7" fill="#F778BA"/>
+
+  <!-- CLI prompt chevron -->
+  <polyline points="252,100 276,120 252,140" fill="none" stroke="#2EA043"
+            stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- wordmark -->
+  <text x="300" y="120" dominant-baseline="central" class="word">binman</text>
+</svg>
