@@ -1845,6 +1845,90 @@ archives. For example, to fetch TF-A from a mirror of prebuilt binaries::
           - store: my-mirror
             pattern: tf-a/{version}/{plat}/bl31.bin
 
+Note that ``handler`` and the ``source-build`` store are repeated here: a blob
+type in a later file replaces the earlier one completely, rather than being
+merged with it, and the same applies to a store.
+
+See the guide to setting up a blob store, in binman's documentation, for a
+worked example.
+
+Configuration reference
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Each file has up to two parts, ``stores`` and ``blobs``. Each store has a name,
+used by the blob types to refer to it, and these properties:
+
+type
+    ``build``, ``local`` or ``url`` (the default)
+
+priority
+    An integer: stores with a lower number are tried first. The default is 50
+
+desc
+    A description, shown by ``binman blob --list-stores``
+
+repo
+    For a ``url`` store, the URL to put in front of a pattern which is not a
+    full URL
+
+Each blob type is named after a compatible string and has these properties:
+
+desc
+    A description, shown by ``binman blob --list``
+
+handler
+    The module in ``blobs/`` which handles it, e.g. for building from source.
+    A blob type with no handler is only fetched from its stores
+
+version
+    For a blob type which provides files for a board, the version to fetch.
+    Quote it, e.g. ``'2.10'``, since an unquoted number such as 2.10 is read as
+    2.1. A whole number may be left unquoted
+
+files
+    For a blob type which provides files for a board, the list of filenames
+
+stores
+    A list of the stores to fetch from, each with ``store``, giving its name,
+    and ``pattern``, giving the path or URL of the file, which is needed for
+    ``local`` and ``url`` stores
+
+Binman checks each file as it reads it, then checks that every store which a
+blob type refers to is set up. Any problem stops binman, with an error which
+names the file, e.g. for a misspelt key::
+
+    binman: /home/me/.config/binman/blobstores.yaml: store 'lab-server': unknown key 'rpo' (expected type, priority, desc, repo)
+
+Fetching from the stores
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+When fetching a blob, binman first builds it from source if its handler can do
+so, unless ``--no-source`` is given. It then tries the stores in order of
+priority, lowest first, keeping the order in which the blob type lists them
+when priorities are equal. It uses the first which provides the file.
+
+A ``local`` store uses the file at its pattern, which is relative to the
+current directory. A leading ``~`` is expanded to the home directory.
+
+A ``url`` store downloads the file with an HTTP GET, waiting up to 60 seconds.
+It uses any proxy given by the usual environment variables, such as
+``https_proxy``. A ``file://`` URL also works, which is useful for trying a
+store out. Binman does not support authentication, so a private server must
+be reachable without credentials, for example over a VPN or from an allowed
+network.
+
+Binman does not check the contents of the files which it fetches, so only use
+stores which you trust. Fetched files are cached as described above and are
+not fetched again, even if they change in the store. To fetch them afresh,
+change the version, or remove them from the cache.
+
+To check a store, list the stores and the blob types which use them, then
+fetch a blob with ``-v5`` to see each path or URL which binman tries::
+
+    binman blob --list-stores
+    binman blob --info google,coral
+    binman -v5 blob --fetch google,coral
+
 Blobs for a board
 -----------------
 

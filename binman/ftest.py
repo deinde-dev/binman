@@ -8,9 +8,11 @@
 
 import collections
 import configparser
+import functools
 import glob
 import gzip
 import hashlib
+import http.server
 from optparse import OptionParser
 import os
 import re
@@ -19,6 +21,7 @@ import shutil
 import struct
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock
 import urllib.error
@@ -1968,50 +1971,116 @@ class TestFunctional(unittest.TestCase):
                 para.append(line)
         return blocks
 
-    def testEtypeDevExample(self):
-        """Test the example in the guide to developing entry types
+    class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+        """Web-server handler which does not log each request"""
+        def log_message(self, *args):
+            pass
 
-        This writes out the files given in the example, then runs each binman
-        command in it and checks the output of each 'cat' command. Binman runs
-        in a separate process, so that the coverage check does not see the
-        example's entry type, which is removed afterwards.
+    def _RunDocExample(self, doc, headings):
+        """Run the example in some sections of a document
+
+        This writes out the files given in the example, then runs each
+        command in it, checking the output of each 'cat' command. Binman runs
+        in a separate process, so that the coverage check does not see any
+        code which the example provides. It has a scratch home directory, so
+        that the user's configuration and cache are not used.
+
+        Commands are handled as follows:
+            binman ...: Run binman
+            cat FILE: Check that the file holds the output shown after it
+            export NAME=VALUE: Set an environment variable for the commands
+                which follow, where $PWD is the example's directory
+            python3 -m http.server --directory DIR PORT: Start a web server
+                for DIR, on a free port which is used in place of PORT in any
+                files written after this
+            Anything else is run with bash
+
+        Args:
+            doc (str): Filename of the document, within the doc/ directory
+            headings (list of str): Headings of the sections to run
+
+        Returns:
+            int: Number of commands which were run
         """
-        doc_fname = os.path.join(self._binman_dir, '..', 'doc', 'etype_dev.rst')
+        doc_fname = os.path.join(self._binman_dir, '..', 'doc', doc)
         if not os.path.exists(doc_fname):
             self.skipTest('Documentation is not available')
-        blocks = self._ReadDocExample(doc_fname, 'An example')
+        blocks = []
+        for heading in headings:
+            blocks += self._ReadDocExample(doc_fname, heading)
 
-        tmpdir = tempfile.mkdtemp(prefix='binman.etype_dev.')
+        tmpdir = tempfile.mkdtemp(prefix='binman.doc.')
+        env = dict(os.environ, HOME=tmpdir)
+        for name in ['XDG_CACHE_HOME', 'BINMAN_BLOB_DIR', 'BINMAN_BLOBSTORES',
+                     'BINMAN_BLOB_BUILD_DIR']:
+            env.pop(name, None)
+        server = None
+        ports = {}
+        ran = 0
         try:
-            ran = 0
             for name, text in blocks:
                 if not text.startswith('$ '):
+                    for port, new_port in ports.items():
+                        text = text.replace(f'localhost:{port}',
+                                            f'localhost:{new_port}')
                     fname = os.path.join(tmpdir, name)
                     os.makedirs(os.path.dirname(fname), exist_ok=True)
                     tools.write_file(fname, text, binary=False)
                     continue
 
-                # Run the commands, checking the output of each 'cat'
                 for cmd in text.split('$ ')[1:]:
                     line, *output = cmd.splitlines()
                     argv = shlex.split(line)
                     if argv[0] == 'binman':
                         result = command.run_one(
                             sys.executable, self._binman_pathname, *argv[1:],
-                            cwd=tmpdir, capture=True, capture_stderr=True,
-                            raise_on_error=False)
+                            cwd=tmpdir, env=env, capture=True,
+                            capture_stderr=True, raise_on_error=False)
                         self.assertEqual(0, result.return_code,
-                                         result.stdout + result.stderr)
-                    else:
-                        self.assertEqual('cat', argv[0])
+                                         f'{line}: {result.stdout}'
+                                         f'{result.stderr}')
+                    elif argv[0] == 'cat':
                         self.assertEqual(
                             '\n'.join(output),
                             tools.read_file(os.path.join(tmpdir, argv[1]),
-                                            binary=False))
+                                            binary=False).rstrip('\n'))
+                    elif argv[0] == 'export':
+                        var, value = argv[1].split('=', 1)
+                        env[var] = value.replace('$PWD', tmpdir)
+                    elif argv[:3] == ['python3', '-m', 'http.server']:
+                        handler = functools.partial(
+                            self._QuietHandler, directory=os.path.join(
+                                tmpdir, argv[argv.index('--directory') + 1]))
+                        server = http.server.ThreadingHTTPServer(
+                            ('localhost', 0), handler)
+                        threading.Thread(target=server.serve_forever,
+                                         daemon=True).start()
+                        ports[argv[-1]] = server.server_address[1]
+                    else:
+                        result = command.run_one(
+                            'bash', '-c', line, cwd=tmpdir, env=env,
+                            capture=True, capture_stderr=True,
+                            raise_on_error=False)
+                        self.assertEqual(0, result.return_code,
+                                         f'{line}: {result.stderr}')
                     ran += 1
-            self.assertEqual(2, ran)
         finally:
+            if server:
+                server.shutdown()
+                server.server_close()
             shutil.rmtree(tmpdir)
+        return ran
+
+    def testEtypeDevExample(self):
+        """Test the example in the guide to developing entry types"""
+        self.assertEqual(2, self._RunDocExample('etype_dev.rst',
+                                                ['An example']))
+
+    def testBlobstoreExample(self):
+        """Test the example in the guide to setting up a blob store"""
+        self.assertEqual(9, self._RunDocExample(
+            'blobstore.rst', ['Serving the blobs', 'Describing the store',
+                              'Building an image']))
 
     def testFillNoSize(self):
         """Test for an fill entry type with no size"""
