@@ -49,6 +49,7 @@ def RunTests(debug, verbosity, processes, test_preserve_dirs, args, toolpath):
     from binman import entry_test
     from binman import fdt_test
     from binman import fip_util_test
+    from binman import fmd_util_test
     from binman import ftest
     from binman import image_test
     from binman import blob
@@ -79,7 +80,7 @@ def RunTests(debug, verbosity, processes, test_preserve_dirs, args, toolpath):
              blob_test.TestBlobYamlConfig, blob_test.TestBlobBuild,
              entry_test.TestEntry, ftest.TestFunctional, fdt_test.TestFdt,
              elf_test.TestElf, image_test.TestImage, cbfs_util_test.TestCbfs,
-             fip_util_test.TestFip])
+             fip_util_test.TestFip, fmd_util_test.TestFmd])
     finally:
         shutil.rmtree(blob_dir)
 

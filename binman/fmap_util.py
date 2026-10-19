@@ -98,13 +98,16 @@ def DecodeFmap(data):
         data = data[FMAP_AREA_LEN:]
     return header, areas
 
-def EncodeFmap(image_size, name, areas):
+def EncodeFmap(image_size, name, areas, base=0, ver_minor=0):
     """Create a new FMAP from a list of areas
 
     Args:
         image_size: Size of image, to put in the header
         name: Name of image, to put in the header
         areas: List of FmapArea objects
+        base (int): Address of the image, to put in the header
+        ver_minor (int): Minor version of the format, to put in the header;
+            coreboot uses 1
 
     Returns:
         String containing the FMAP created
@@ -114,7 +117,8 @@ def EncodeFmap(image_size, name, areas):
         ConvertName(names, params)
         return struct.pack(fmt, *params)
 
-    values = FmapHeader(FMAP_SIGNATURE, 1, 0, 0, image_size, name, len(areas))
+    values = FmapHeader(FMAP_SIGNATURE, 1, ver_minor, base, image_size, name,
+                        len(areas))
     blob = _FormatBlob(FMAP_HEADER_FORMAT, FMAP_HEADER_NAMES, values)
     for area in areas:
         blob += _FormatBlob(FMAP_AREA_FORMAT, FMAP_AREA_NAMES, area)

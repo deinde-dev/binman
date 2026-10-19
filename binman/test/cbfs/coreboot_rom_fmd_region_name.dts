@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0+
+
+/dts-v1/;
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	binman {
+		coreboot-rom {
+			fmd-filename = "cbrom.fmd";
+
+			vpd {
+				type = "text";
+				text = "vpd-data";
+				cbfs-name = "vpd";
+				fmap-region = "RO_VPD";
+			};
+		};
+	};
+};
