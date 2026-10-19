@@ -1132,6 +1132,95 @@ class TestBlobYamlConfig(unittest.TestCase):
             shutil.rmtree(self._indir)
         blobstore._config = None
 
+    def _load_bad_config(self, text):
+        """Load a configuration which is not valid
+
+        Args:
+            text (str): Contents of the user's configuration file, in YAML
+
+        Returns:
+            str: Error message from loading it, without the filename
+        """
+        fname = os.path.join(self._indir, 'bad.yaml')
+        tools.write_file(fname, text, binary=False)
+        with unittest.mock.patch.dict(os.environ,
+                                      {blobstore.CONFIG_ENV: fname}):
+            with self.assertRaises(ValueError) as exc:
+                blobstore._load_config()
+        msg = str(exc.exception)
+        self.assertTrue(msg.startswith(f'{fname}: '), msg)
+        return msg[len(fname) + 2:]
+
+    def test_config_errors(self):
+        """Test the checks on the configuration"""
+        ok_store = 'stores: {mirror: {type: url, repo: http://x}}\n'
+        cases = [
+            ('store: {}', "unknown key 'store' (expected stores, blobs)"),
+            ('- item', 'expected a mapping'),
+            ('stores: [a]', 'stores: expected a mapping'),
+            ('blobs: [a]', 'blobs: expected a mapping'),
+            ('stores: {mirror: url}', "store 'mirror': expected a mapping"),
+            ('stores: {mirror: {type: url, patern: x}}',
+             "store 'mirror': unknown key 'patern' (expected type, priority, "
+             'desc, repo)'),
+            ('stores: {mirror: {type: ulr}}',
+             "store 'mirror': unknown type 'ulr' (expected build, local, url)"),
+            ('stores: {mirror: {priority: high}}',
+             "store 'mirror': priority must be an integer"),
+            ('blobs: {"test,blob": {verison: 1}}',
+             "blob type 'test,blob': unknown key 'verison'"),
+            ('blobs: {"test,blob": {version: 2.10}}',
+             "blob type 'test,blob': version 2.1 is not a string; quote it"),
+            ('blobs: {"test,blob": {files: a.bin}}',
+             "blob type 'test,blob': files must be a list of filenames"),
+            ('blobs: {"test,blob": {files: [1]}}',
+             "blob type 'test,blob': files must be a list of filenames"),
+            ('blobs: {"test,blob": {stores: mirror}}',
+             "blob type 'test,blob': stores must be a list"),
+            ('blobs: {"test,blob": {stores: [{pattern: x}]}}',
+             "blob type 'test,blob': each of its stores needs 'store'"),
+            ('blobs: {"test,blob": {stores: [{store: mirror, patern: x}]}}',
+             "blob type 'test,blob': stores: unknown key 'patern'"),
+            (ok_store + 'blobs: {"test,blob": {stores: [{store: other}]}}',
+             "blob type 'test,blob': unknown store 'other'"),
+            (ok_store + 'blobs: {"test,blob": {stores: [{store: mirror}]}}',
+             "blob type 'test,blob': store 'mirror' needs a 'pattern'"),
+        ]
+        for text, expect in cases:
+            with self.subTest(text=text):
+                blobstore._config = None
+                self.assertIn(expect, self._load_bad_config(text))
+
+    def test_config_ok(self):
+        """Test a valid configuration with all the optional parts"""
+        fname = os.path.join(self._indir, 'good.yaml')
+        tools.write_file(fname, """
+stores:
+  mirror:
+    type: url
+    repo: https://example.com/firmware
+    priority: 40
+    desc: Mirror
+  files:
+    type: local
+blobs:
+  test,blob:
+    desc: Test blob
+    version: 1
+    files: [a.bin]
+    stores:
+      - store: source-build
+      - store: mirror
+        pattern: test/{version}/{file}
+      - store: files
+        pattern: ~/blobs/{file}
+""", binary=False)
+        with unittest.mock.patch.dict(os.environ,
+                                      {blobstore.CONFIG_ENV: fname}):
+            config = blobstore._load_config()
+        self.assertEqual(40, config['stores']['mirror']['priority'])
+        self.assertIn('test,blob', config['blobs'])
+
     def test_load_config_missing_file(self):
         """Test that missing config file returns empty dict"""
         # Point to a non-existent config file

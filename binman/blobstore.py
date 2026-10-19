@@ -39,6 +39,14 @@ _config = None
 # Format string for listing stores
 STORE_FORMAT = '%-20.20s %-15.15s %5s  %s'
 
+# Types of store. 'git-release' is another name for 'url'
+STORE_TYPES = ('build', 'local', 'url', 'git-release')
+
+# Keys allowed in each part of the configuration
+STORE_KEYS = ('type', 'priority', 'desc', 'repo')
+BLOB_KEYS = ('desc', 'handler', 'version', 'files', 'stores')
+BLOB_STORE_KEYS = ('store', 'pattern')
+
 
 def user_config_files():
     """Get the user's configuration files, in the order to read them
@@ -87,20 +95,123 @@ def _read_yaml(fname):
         return yaml.safe_load(inf) or {}
 
 
+def _check_keys(where, item, allowed):
+    """Check that a part of the configuration has only the allowed keys
+
+    Args:
+        where (str): Description of the part, for errors
+        item (dict): Part of the configuration
+        allowed (tuple of str): Keys which are allowed
+
+    Raises:
+        ValueError: The part is not a mapping or has an unknown key
+    """
+    if not isinstance(item, dict):
+        raise ValueError(f'{where}: expected a mapping')
+    for key in item:
+        if key not in allowed:
+            raise ValueError(f"{where}: unknown key '{key}' (expected "
+                             f"{', '.join(allowed)})")
+
+
+def check_config(config, fname):
+    """Check the contents of a configuration file
+
+    Args:
+        config (dict): Configuration read from the file
+        fname (str): Path to the file, for errors
+
+    Raises:
+        ValueError: The configuration is not valid
+    """
+    _check_keys(fname, config, ('stores', 'blobs'))
+    stores = config.get('stores') or {}
+    if not isinstance(stores, dict):
+        raise ValueError(f'{fname}: stores: expected a mapping')
+    for name, store in stores.items():
+        where = f"{fname}: store '{name}'"
+        _check_keys(where, store, STORE_KEYS)
+        store_type = store.get('type', 'url')
+        if store_type not in STORE_TYPES:
+            raise ValueError(f"{where}: unknown type '{store_type}' (expected "
+                             f"{', '.join(STORE_TYPES[:3])})")
+        if not isinstance(store.get('priority', 0), int):
+            raise ValueError(f'{where}: priority must be an integer')
+
+    blobs = config.get('blobs') or {}
+    if not isinstance(blobs, dict):
+        raise ValueError(f'{fname}: blobs: expected a mapping')
+    for name, blob in blobs.items():
+        where = f"{fname}: blob type '{name}'"
+        _check_keys(where, blob, BLOB_KEYS)
+        # A version such as 2.10 would be read as a number, then used as 2.1
+        version = blob.get('version', '')
+        if not isinstance(version, (str, int)) or isinstance(version, bool):
+            raise ValueError(f'{where}: version {version} is not a string; '
+                             "quote it, e.g. '2.10', so it is not read as a "
+                             'number')
+        files = blob.get('files', [])
+        if (not isinstance(files, list) or
+                not all(isinstance(item, str) for item in files)):
+            raise ValueError(f'{where}: files must be a list of filenames')
+        refs = blob.get('stores', [])
+        if not isinstance(refs, list):
+            raise ValueError(f'{where}: stores must be a list')
+        for ref in refs:
+            _check_keys(f'{where}: stores', ref, BLOB_STORE_KEYS)
+            if 'store' not in ref:
+                raise ValueError(f"{where}: each of its stores needs 'store'")
+
+
+def check_refs(config, origins):
+    """Check that the blob types refer to stores which are set up
+
+    Args:
+        config (dict): Merged configuration
+        origins (dict): Path of the file which gave each blob type, for errors
+
+    Raises:
+        ValueError: A blob type refers to an unknown store or lacks a pattern
+    """
+    stores = config.get('stores', {})
+    for name, blob in config.get('blobs', {}).items():
+        where = f"{origins[name]}: blob type '{name}'"
+        for ref in blob.get('stores', []):
+            store_name = ref['store']
+            if store_name not in stores:
+                raise ValueError(f"{where}: unknown store '{store_name}'")
+            store_type = stores[store_name].get('type', 'url')
+            if store_type != 'build' and not ref.get('pattern'):
+                raise ValueError(
+                    f"{where}: store '{store_name}' needs a 'pattern'")
+
+
 def _load_config():
     """Load the configuration, from the package and then the user's files
 
+    Each file is checked as it is read, then the merged configuration is
+    checked to make sure that each blob type's stores are set up.
+
     Returns:
         dict: The configuration data
+
+    Raises:
+        ValueError: The configuration is not valid
     """
     global _config  # pylint: disable=global-statement
     if _config is None:
         config = {}
+        origins = {}
+        fnames = []
         config_path = os.path.join(BINMAN_DIR, 'blobstores.yaml')
         if os.path.exists(config_path):
-            merge_config(config, _read_yaml(config_path))
-        for fname in user_config_files():
-            merge_config(config, _read_yaml(fname))
+            fnames.append(config_path)
+        for fname in fnames + user_config_files():
+            extra = _read_yaml(fname)
+            check_config(extra, fname)
+            merge_config(config, extra)
+            origins.update({name: fname for name in extra.get('blobs') or {}})
+        check_refs(config, origins)
         _config = config
     return _config
 

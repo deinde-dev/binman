@@ -28,6 +28,10 @@ Changed
   named after the input, e.g. ``image.dtb.out``. Use ``--project u-boot`` to
   package a U-Boot build from outside its build directory. See 'U-Boot mode'
   in the documentation.
+- Binman checks the blob store configuration, reporting unknown keys and
+  store types, a blob type which refers to a store which is not set up or
+  lacks a pattern, and a version which is not quoted, such as 2.10, rather
+  than ignoring or misreading them.
 
 0.1.3 - 2026-10-18
 ------------------
