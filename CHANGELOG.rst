@@ -16,6 +16,12 @@ Added
   other than U-Boot, such as SeaBIOS, and extra files such as configuration.
 - The ``--etype-dir`` option adds a directory to search for entry types,
   before binman's own, for developing entry types.
+- The ``coreboot-rom`` entry type can create an image from a coreboot flash
+  map, with ``fmap-filename``, rather than starting from a coreboot ROM. Its
+  files can be of any type which cbfstool knows, such as ``bootblock``, and
+  ``cbfs-options`` gives further arguments for cbfstool, such as a position
+  or alignment. This allows binman to build a coreboot image from the pieces
+  which coreboot's build produces.
 
 Changed
 ~~~~~~~
