@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-2.0+
+
+/dts-v1/;
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	binman {
+		coreboot-rom {
+			fmap-filename = "cbrom-missing.fmap";
+			cbfs-regions = "COREBOOT";
+
+			bootblock {
+				type = "blob";
+				filename = "cbrom-bootblock.bin";
+				cbfs-name = "bootblock";
+				cbfs-type = "bootblock";
+				cbfs-options = "-b", "-64";
+			};
+			stage {
+				type = "blob";
+				filename = "cbrom-payload.elf";
+				cbfs-name = "fallback/romstage";
+				cbfs-type = "stage";
+			};
+			config {
+				type = "text";
+				text = "a-setting a-setting a-setting a-setting a-setting";
+				cbfs-name = "config";
+				cbfs-compress = "lzma";
+				cbfs-options = "-r", "COREBOOT", "-a", "64";
+			};
+		};
+	};
+};

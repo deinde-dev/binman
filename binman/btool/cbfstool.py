@@ -143,7 +143,53 @@ class Bintoolcbfstool(bintool.Bintool):
         args = [cbfs_fname, 'create', '-s', f'{size:#x}', '-m', arch]
         return self.run_cmd(*args)
 
+    def create_from_fmap(self, cbfs_fname, fmap_fname, regions):
+        """Create a new image laid out by a flash map, with empty CBFSes
+
+        Args:
+            cbfs_fname (str): Filename of the image to create
+            fmap_fname (str): Filename of the binary flash map (FMAP)
+            regions (str): Regions of the flash map which hold a CBFS,
+                separated by commas, e.g. 'COREBOOT'
+
+        Returns:
+            str: Tool output
+        """
+        args = [cbfs_fname, 'create', '-M', fmap_fname, '-r', regions]
+        return self.run_cmd(*args)
+
     # pylint: disable=R0913
+    def add_file(self, cbfs_fname, name, fname, ftype, compress=None,
+                 options=None):
+        """Add a file of any type to the CBFS
+
+        Args:
+            cbfs_fname (str): Filename of CBFS to update
+            name (str): Name to use inside the CBFS
+            fname (str): Filename of file to add
+            ftype (str): Type of file: 'stage' or 'payload' for an ELF file
+                which cbfstool converts, 'flat' for a flat binary (with its
+                load and entry addresses in the options), else a CBFS file
+                type such as 'raw' or 'bootblock'
+            compress (str): Compression to use (cbfs_util.COMPRESS_NAMES), or
+                None to use cbfstool's default
+            options (list of str): Further arguments for cbfstool, e.g.
+                ['-r', 'COREBOOT', '-a', '64']
+
+        Returns:
+            str: Tool output
+        """
+        if ftype in ('stage', 'payload'):
+            args = [cbfs_fname, f'add-{ftype}']
+        elif ftype == 'flat':
+            args = [cbfs_fname, 'add-flat-binary']
+        else:
+            args = [cbfs_fname, 'add', '-t', ftype]
+        args += ['-n', name, '-f', fname]
+        if compress:
+            args += ['-c', compress]
+        return self.run_cmd(*args, *(options or []))
+
     def add_raw(self, cbfs_fname, name, fname, compress=None, base=None):
         """Add a raw file to the CBFS
 
@@ -183,29 +229,6 @@ class Bintoolcbfstool(bintool.Bintool):
                 'add-stage',
                 '-n', name,
                 '-f', fname
-            ]
-        return self.run_cmd(*args)
-
-    def add_payload(self, cbfs_fname, name, fname, compress='lzma'):
-        """Add an ELF file as a payload to the CBFS
-
-        cbfstool converts the ELF into coreboot's payload format, keeping its
-        segments and entry point.
-
-        Args:
-            cbfs_fname (str): Filename of CBFS to update
-            name (str): Name to use inside the CBFS
-            fname (str): Filename of the ELF file to add
-            compress (str): Compression to use (cbfs_util.COMPRESS_NAMES)
-
-        Returns:
-            str: Tool output
-        """
-        args = [cbfs_fname,
-                'add-payload',
-                '-n', name,
-                '-f', fname,
-                '-c', compress or 'none',
             ]
         return self.run_cmd(*args)
 

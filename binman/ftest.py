@@ -3171,7 +3171,7 @@ class TestFunctional(unittest.TestCase):
         self._SetupCorebootFiles()
         with self.assertRaises(ValueError) as e:
             self._DoReadFile('cbfs/coreboot_rom_files_bad_type.dts')
-        self.assertIn("Unknown cbfs-type 'fred'", str(e.exception))
+        self.assertIn("Unknown type 'fred'", str(e.exception))
 
     def testCorebootRomFilesNotElf(self):
         """Test adding a payload to a coreboot ROM which is not an ELF"""
@@ -3204,6 +3204,57 @@ class TestFunctional(unittest.TestCase):
         self.assertEqual(2 * 0x8000, len(data))
         out = self._CheckCorebootRom(data[:0x8000])
         self.assertEqual(1, out.count('fallback/payload'))
+
+    def _SetupCorebootCreate(self):
+        """Set up the inputs to create a coreboot image from a flash map
+
+        The flash map has an FMAP region followed by a COREBOOT region for the
+        CBFS, as for coreboot's default x86 layout
+        """
+        areas = [fmap_util.FmapArea(0, 0x200, b'FMAP', 0),
+                 fmap_util.FmapArea(0x200, 0x7e00, b'COREBOOT', 0)]
+        self._MakeInputFile('cbrom.fmap',
+                            fmap_util.EncodeFmap(0x8000, 'FLASH', areas))
+        self._MakeInputFile('cbrom-bootblock.bin', tools.get_bytes(0xbb, 64))
+        self._MakeInputFile('cbrom-payload.elf',
+                            tools.read_file(self.ElfTestFile('elf_sections')))
+
+    def testCorebootRomCreate(self):
+        """Test creating a coreboot image from a flash map"""
+        self._SetupCorebootCreate()
+        data = self._DoReadFile('cbfs/coreboot_rom_create.dts')
+        self.assertEqual(0x8000, len(data))
+        self.assertEqual(tools.get_bytes(0xbb, 64), data[-64:])
+        out = self._CheckCorebootRom(data)
+        lines = {line.split()[0]: line.split() for line in out.splitlines()
+                 if line.split()}
+        self.assertEqual('bootblock', lines['bootblock'][2])
+        self.assertEqual('stage', lines['fallback/romstage'][2])
+        self.assertEqual('raw', lines['config'][2])
+        self.assertEqual('LZMA', lines['config'][4])
+        self.assertEqual(0, int(lines['config'][1], 16) % 64)
+
+    def testCorebootRomCreateMissing(self):
+        """Test creating a coreboot image with the flash map missing"""
+        self._SetupCorebootCreate()
+        with self.assertRaises(ValueError) as e:
+            self._DoTestFile('cbfs/coreboot_rom_create_missing.dts')
+        self.assertIn("Filename 'cbrom-missing.fmap' not found",
+                      str(e.exception))
+        with terminal.capture() as (_, stderr):
+            self._DoTestFile('cbfs/coreboot_rom_create_missing.dts',
+                             allow_missing=True)
+        self.assertRegex(stderr.getvalue(),
+                         "Image 'image'.*missing.*: coreboot-rom")
+
+    def testCorebootRomCreateMissingBintool(self):
+        """Test creating a coreboot image with cbfstool missing"""
+        self._SetupCorebootCreate()
+        with terminal.capture() as (_, stderr):
+            self._DoTestFile('cbfs/coreboot_rom_create.dts',
+                             force_missing_bintools='cbfstool')
+        self.assertRegex(stderr.getvalue(),
+                         "Image 'image'.*missing bintools.*: cbfstool")
 
     def testCorebootRomFilesMissingBintool(self):
         """Test adding files to a coreboot ROM with cbfstool missing"""
