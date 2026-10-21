@@ -1942,7 +1942,8 @@ class TestFunctional(unittest.TestCase):
         lines = tools.read_file(fname, binary=False).splitlines()
         start = lines.index(heading) + 2
         end = start
-        while end + 1 < len(lines) and not re.match(r'^-+$', lines[end + 1]):
+        while end + 1 < len(lines) and not re.match(r'^[-=]+$',
+                                                     lines[end + 1]):
             end += 1
         lines = lines[start:end]
 
@@ -2076,6 +2077,12 @@ class TestFunctional(unittest.TestCase):
         """Test the example in the guide to developing entry types"""
         self.assertEqual(2, self._RunDocExample('etype_dev.rst',
                                                 ['An example']))
+
+    def testGettingStartedExample(self):
+        """Test the example in the manual's 'Getting started' section"""
+        self.assertEqual(10, self._RunDocExample(
+            '../binman/binman.rst', ['A first image', 'Looking inside an image',
+                                     'Replacing an entry']))
 
     def testBlobstoreExample(self):
         """Test the example in the guide to setting up a blob store"""
