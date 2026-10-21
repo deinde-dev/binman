@@ -16,6 +16,7 @@ To use, add 'binman_docs' to the extensions list in conf.py.
 """
 
 import ast
+import importlib.util
 import os
 
 
@@ -56,6 +57,25 @@ def get_bintool_docstring(source_file):
     return None
 
 
+def load_entry_groups(srcdir):
+    """Load the module which sorts entry types into groups
+
+    It is loaded from its file, since importing binman would need its
+    dependencies
+
+    Args:
+        srcdir: Root of the binman source tree
+
+    Returns:
+        module: The entry_groups module
+    """
+    fname = os.path.join(srcdir, 'binman', 'entry_groups.py')
+    spec = importlib.util.spec_from_file_location('entry_groups', fname)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def generate_entry_docs(srcdir):
     """Generate entries.rst content from etype source files.
 
@@ -83,29 +103,44 @@ directory. You can use the existing entries as examples.
 Note that some entries are subclasses of others, using and extending their
 features to produce new behaviours.
 
+The entry types are listed in groups: those for any image first, then those
+for particular projects and platforms.
+
 
 ''']
 
-    missing = []
-    for name in modules:
-        source = os.path.join(etype_dir, name + '.py')
-        docs = get_entry_docstring(source)
-        if docs:
-            lines = docs.splitlines()
-            first_line = lines[0]
-            rest = [line[4:] for line in lines[1:]]
-            hdr = 'Entry: %s: %s' % (name.replace('_', '-'), first_line)
+    groups, ungrouped = load_entry_groups(srcdir).group_modules(modules)
+    if ungrouped:
+        raise ValueError('Entry types not in any group (see '
+                         'binman/entry_groups.py): %s' % ', '.join(ungrouped))
 
-            ref_name = 'etype_%s' % name
-            parts.append('.. _%s:' % ref_name)
-            parts.append('')
-            parts.append(hdr)
-            parts.append('-' * len(hdr))
-            parts.append('\n'.join(rest))
-            parts.append('')
-            parts.append('')
-        else:
-            missing.append(name)
+    missing = []
+    for title, desc, members in groups:
+        parts.append(title)
+        parts.append('*' * len(title))
+        parts.append('')
+        parts.append(desc)
+        parts.append('')
+        parts.append('')
+        for name in members:
+            source = os.path.join(etype_dir, name + '.py')
+            docs = get_entry_docstring(source)
+            if docs:
+                lines = docs.splitlines()
+                first_line = lines[0]
+                rest = [line[4:] for line in lines[1:]]
+                hdr = 'Entry: %s: %s' % (name.replace('_', '-'), first_line)
+
+                ref_name = 'etype_%s' % name
+                parts.append('.. _%s:' % ref_name)
+                parts.append('')
+                parts.append(hdr)
+                parts.append('-' * len(hdr))
+                parts.append('\n'.join(rest))
+                parts.append('')
+                parts.append('')
+            else:
+                missing.append(name)
 
     if missing:
         raise ValueError('Documentation is missing for modules: %s' %

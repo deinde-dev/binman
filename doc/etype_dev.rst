@@ -192,7 +192,9 @@ Once the entry type works, send it to binman so that it is maintained along
 with everything else. See ``CONTRIBUTING.rst`` for setting up a checkout and
 running the tests. Then:
 
-1. Move the file to ``binman/etype/``.
+1. Move the file to ``binman/etype/`` and add it to the group it belongs in,
+   in ``binman/entry_groups.py``, which arranges the documentation of the
+   entry types. The tests check that every entry type is in a group.
 2. Add a test description in ``binman/test/entry/``, e.g.
    ``build_marker.dts``, and a test in ``binman/ftest.py`` which builds it and
    checks the result. For example:
@@ -211,7 +213,7 @@ running the tests. Then:
 5. Send a pull request.
 
 The entry type's docstring then appears in binman's documentation of entry
-types, under its type name.
+types, under its type name, in its group.
 
 
 Limitations

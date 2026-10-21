@@ -14,6 +14,7 @@ import time
 
 from binman import bintool
 from binman import elf
+from binman import entry_groups
 from dtoc import fdt_util
 from u_boot_pylib import tools
 from u_boot_pylib.tools import to_hex, to_hex_size
@@ -884,6 +885,9 @@ directory. You can use the existing entries as examples.
 Note that some entries are subclasses of others, using and extending their
 features to produce new behaviours.
 
+The entry types are listed in groups: those for any image first, then those
+for particular projects and platforms.
+
 
 ''')
         modules = sorted(modules)
@@ -891,29 +895,42 @@ features to produce new behaviours.
         # Don't show the test entry
         if '_testing' in modules:
             modules.remove('_testing')
+        groups, ungrouped = entry_groups.group_modules(modules)
+        if ungrouped:
+            raise ValueError('Entry types not in any group (see '
+                             'binman/entry_groups.py): %s' %
+                             ', '.join(ungrouped))
         missing = []
-        for name in modules:
-            module = Entry.Lookup('WriteDocs', name, False)
-            docs = getattr(module, '__doc__')
-            if test_missing == name:
-                docs = None
-            if docs:
-                lines = docs.splitlines()
-                first_line = lines[0]
-                rest = [line[4:] for line in lines[1:]]
-                hdr = 'Entry: %s: %s' % (name.replace('_', '-'), first_line)
+        for title, desc, members in groups:
+            print(title)
+            print('*' * len(title))
+            print()
+            print(desc)
+            print()
+            print()
+            for name in members:
+                module = Entry.Lookup('WriteDocs', name, False)
+                docs = getattr(module, '__doc__')
+                if test_missing == name:
+                    docs = None
+                if docs:
+                    lines = docs.splitlines()
+                    first_line = lines[0]
+                    rest = [line[4:] for line in lines[1:]]
+                    hdr = 'Entry: %s: %s' % (name.replace('_', '-'),
+                                             first_line)
 
-                # Create a reference for use by rST docs
-                ref_name = f'etype_{module.__name__[6:]}'.lower()
-                print('.. _%s:' % ref_name)
-                print()
-                print(hdr)
-                print('-' * len(hdr))
-                print('\n'.join(rest))
-                print()
-                print()
-            else:
-                missing.append(name)
+                    # Create a reference for use by rST docs
+                    ref_name = f'etype_{module.__name__[6:]}'.lower()
+                    print('.. _%s:' % ref_name)
+                    print()
+                    print(hdr)
+                    print('-' * len(hdr))
+                    print('\n'.join(rest))
+                    print()
+                    print()
+                else:
+                    missing.append(name)
 
         if missing:
             raise ValueError('Documentation is missing for modules: %s' %
