@@ -34,6 +34,7 @@ from binman import cmdline
 from binman import control
 from binman import elf
 from binman import elf_test
+from binman import entry_groups
 from binman import fip_util
 from binman import fmap_util
 from binman import fmd_util
@@ -1834,6 +1835,28 @@ class TestFunctional(unittest.TestCase):
         with terminal.capture() as (stdout, stderr):
             control.WriteEntryDocs(control.GetEntryModules())
         self.assertTrue(len(stdout.getvalue()) > 0)
+
+    def testEntryDocsGroups(self):
+        """Test that every entry type is in a group for the documentation"""
+        modules = sorted(control.GetEntryModules() - {'_testing'})
+        groups, ungrouped = entry_groups.group_modules(modules)
+        self.assertEqual([], ungrouped)
+        self.assertEqual(sorted(modules),
+                         sorted(name for _, _, members in groups
+                                for name in members))
+
+        with self.assertRaises(ValueError) as e:
+            with terminal.capture():
+                control.WriteEntryDocs(modules + ['fred'])
+        self.assertIn('Entry types not in any group (see '
+                      'binman/entry_groups.py): fred', str(e.exception))
+
+        dup_groups = entry_groups.GROUPS + [('Again', 'Again', ['blob'])]
+        with unittest.mock.patch.object(entry_groups, 'GROUPS', dup_groups):
+            with self.assertRaises(ValueError) as e:
+                entry_groups.group_modules(modules)
+        self.assertIn('Entry types in more than one group: blob',
+                      str(e.exception))
 
     def testEntryDocsMissing(self):
         """Test handling of missing entry documentation"""
