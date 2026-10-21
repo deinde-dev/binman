@@ -8,8 +8,14 @@ the project follows `Semantic Versioning <https://semver.org/>`_.
 Unreleased
 ----------
 
+0.2.0 - 2026-10-21
+------------------
+
 Added
 ~~~~~
+- A standalone ``binman_sym.h`` header, installed with binman, lets any
+  project use the symbols which binman fills in with the positions of entries,
+  without U-Boot's configuration. The documentation describes the interface.
 - The ``coreboot-rom`` entry type can add each of its subnodes to the CBFS
   as a file of its own, given by ``cbfs-name``, with ``cbfs-type`` selecting
   a raw file, an ELF payload, a flat binary or a stage. This allows payloads
@@ -27,6 +33,11 @@ Added
   layout and produces the same FMAP as coreboot's fmaptool. A file can be
   written to a region of the flash map which is not a CBFS, with
   ``fmap-region``.
+- The documentation has a 'Getting started' section, sections on using
+  binman with coreboot and with other projects, guides to setting up a blob
+  store and to developing entry types, and a reference for ``binman blob``.
+  The entry types are listed in groups, such as those for any image and those
+  for particular projects.
 
 Changed
 ~~~~~~~
