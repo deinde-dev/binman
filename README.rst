@@ -28,7 +28,8 @@ they require, then use binman to stitch everything together into an image. It:
 - reads an image description from a devicetree and works out what to place
   where, with padding, alignment, compression and hashing;
 - supports hierarchical images and a large set of entry types, including FIT,
-  CBFS, ARM Trusted Firmware FIP and many SoC-specific formats;
+  coreboot's CBFS and flash maps, the ARM Trusted Firmware FIP and many
+  SoC-specific formats;
 - lets firmware find other binaries in the image, using linker symbols or the
   devicetree description of the image;
 - inspects existing images, extracting and replacing their contents and
@@ -37,8 +38,10 @@ they require, then use binman to stitch everything together into an image. It:
 - fetches firmware blobs such as TF-A, building them from source where it can,
   and keeps them in a cache.
 
-Binman is designed primarily for use with U-Boot and associated binaries such
-as ARM Trusted Firmware, but is general enough to be used with other projects.
+Binman started as part of U-Boot and still builds U-Boot's images, but it is
+not tied to U-Boot. It can build coreboot images from a coreboot flash-map
+descriptor, and can package the firmware for TF-A, OP-TEE, Zephyr or any other
+project.
 
 Installation
 ------------

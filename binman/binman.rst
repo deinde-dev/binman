@@ -4,84 +4,78 @@
 Introduction
 ============
 
-Firmware often consists of several components which must be packaged together.
-For example, we may have SPL, U-Boot, a devicetree and an environment area
-grouped together and placed in MMC flash. When the system starts, it must be
-able to find these pieces.
+Firmware usually consists of several pieces which must be packaged together
+into an image: perhaps a first-stage loader, a main firmware such as U-Boot or
+coreboot, ARM Trusted Firmware, OP-TEE, devicetrees, vendor blobs, an
+environment area and a flash map. Each piece must go in the right place, with
+the right alignment, padding, compression and headers, and the firmware often
+needs to find the other pieces when it runs.
 
-Building firmware should be separate from packaging it. Many of the complexities
-of modern firmware build systems come from trying to do both at once. With
-binman, you build all the pieces that are needed, using whatever assortment of
-projects and build systems are needed, then use binman to stitch everything
-together.
+Binman does this packaging. Building firmware should be separate from packaging
+it: many of the complexities of firmware build systems come from trying to do
+both at once. With binman, you build all the pieces that are needed, using
+whatever projects and build systems they require, then use binman to stitch
+everything together.
 
 
 What it does
 ------------
 
-Binman reads your board's devicetree and finds a node which describes the
-required image layout. It uses this to work out what to place where.
+Binman reads a description of the image, written as a devicetree, and works out
+what to place where. It then builds the image, running any tools needed along
+the way. It can also inspect an existing image, list its contents and extract
+or replace any part of it, repacking where needed.
 
-Binman provides a mechanism for building images, from simple SPL + U-Boot
-combinations, to more complex arrangements with many parts. It also allows
-users to inspect images, extract and replace binaries within them, repacking if
-needed.
+Binman supports:
 
+- positioning, alignment, padding and filling, with sections for images
+  within images
+- compression and hashing of entries
+- many image formats, such as FIT, coreboot's CBFS, flash maps (FMAP), the
+  ARM Trusted Firmware FIP, EFI capsules and a range of SoC-specific formats
+  for Intel, AMD, NXP, Rockchip, TI and others, with about 100 entry types
+  altogether
+- letting firmware find the other parts of the image at run time, using
+  symbols which binman fills in, or a description of the image stored within
+  it (the fdtmap)
+- building an image when some blobs are missing, so that a build can be
+  checked without them, and fetching blobs, such as TF-A, from source or
+  from a blob store
+- fetching the external tools which it needs, such as mkimage or cbfstool
 
-Features
---------
-
-Apart from basic padding, alignment, and positioning features, Binman supports
-hierarchical images, compression, hashing and dealing with the binary blobs,
-which are a sad trend in open-source firmware at present.
-
-Executable binaries can access the location of other binaries in an image by
-using special linker symbols (zero-overhead but limited) or by reading
-the devicetree description of the image.
-
-Binman is designed primarily for use with U-Boot and associated binaries such
-as ARM Trusted Firmware, but it is suitable for use with other projects, such
-as Zephyr. Binman also provides facilities useful in Chromium OS, such as CBFS,
-vblocks and the like.
-
-Binman provides a way to process binaries before they are included, by adding a
-Python plug-in.
-
-Binman is intended for use with U-Boot but is designed to be general enough
-to be useful in other image-packaging situations.
+Binman started as part of U-Boot and is still used to build U-Boot's images,
+but it is not tied to U-Boot. It can build coreboot images, from a coreboot
+flash-map descriptor, and can package firmware for TF-A, OP-TEE, Zephyr or any
+other project. See `Using binman with U-Boot`_, `Using binman with coreboot`_
+and `Using binman with other projects`_.
 
 
 Motivation
 ----------
 
-As mentioned above, packaging of firmware is quite a different task from
-building the various parts. In many cases the various binaries which go into image
-come from separate build systems. For example, ARM Trusted Firmware
-is used on ARMv8 devices but is not built in the U-Boot tree. If a Linux kernel
-is included in the firmware image, it is built elsewhere.
+In many cases the binaries which go into an image come from separate projects
+and build systems. For example, ARM Trusted Firmware is used on ARMv8 devices
+but is not built by the bootloader, and a Linux kernel or ramdisk in the
+image is built elsewhere again.
 
-It is of course possible to add further build rules to the U-Boot
-build system to cover these cases. It can shell out to other Makefiles and
-build scripts. But it seems preferable to create a clear divide between building
-software and packaging it.
-
-At present this is handled by manual instructions, different for each board,
-on how to create images that will boot. By turning these instructions into a
-standard format, we can support making valid images for any board without
-manual effort, lots of READMEs, etc.
+It is of course possible to add further build rules to one of these build
+systems to cover the others, shelling out to other Makefiles and build
+scripts. But it seems preferable to create a clear divide between building
+software and packaging it. Otherwise the instructions for creating an image
+which boots tend to end up in a README for each board, to be followed by hand.
+Turning these instructions into a standard format means that valid images can
+be produced for any board without manual effort.
 
 Benefits:
 
-  - Each binary can have its own build system and tool chain without creating
+  - Each binary can have its own build system and toolchain without creating
     any dependencies between them
   - Avoids the need for a single-shot build: individual parts can be updated
     and brought in as needed
-  - Provides for a standard image description available in the build and at
-    run-time
+  - Provides a standard image description, which is available in the build
+    and, if needed, at run time
   - SoC-specific image-signing tools can be accommodated
-  - Avoids cluttering the U-Boot build system with image-building code
-  - The image description is automatically available at run-time in U-Boot,
-    SPL. It can be made available to other software also
+  - Keeps image-building code out of each project's build system
   - The image description is easily readable (a text file in devicetree
     format) and permits flexible packing of binaries
 
@@ -93,6 +87,8 @@ Binman uses the following terms:
 
 - image - an output file containing a firmware image
 - binary - an input binary that goes into the image
+- entry - an item in an image, such as a binary, a section holding further
+  entries, or something which binman generates, such as a flash map
 
 
 Installation
@@ -104,65 +100,376 @@ You can install binman using::
 
 The name was chosen since binman conflicts with an existing package.
 
-If you are using binman within the U-Boot tree, it may be easiest to add a
-symlink from your local `~/.bin` directory to `/path/to/tools/binman/binman`.
+The ``pylibfdt`` dependency is built from source, so this needs ``swig``, a C
+compiler and the Python development headers (on Debian and Ubuntu:
+``apt install swig build-essential python3-dev``). Binman also needs the
+devicetree compiler, ``dtc``, to compile image descriptions.
+
+Some entry types need external tools, such as ``mkimage`` or ``cbfstool``.
+Binman reports any which are missing and can fetch them::
+
+    binman tool -f missing
+
+See `Bintools`_ for more information.
 
 
-Relationship to FIT
--------------------
+Getting started
+===============
 
-FIT is U-Boot's official image format. It supports multiple binaries with
-load / execution addresses, compression. It also supports verification
-through hashing and RSA signatures.
-
-FIT was originally designed to support booting a Linux kernel (with an
-optional ramdisk) and devicetree chosen from assorted options in the FIT.
-Now that U-Boot supports configuration via devicetree, it is possible to
-load U-Boot from a FIT, with the devicetree chosen by SPL.
-
-Binman considers FIT to be one of the binaries it can place in the image.
-
-Where possible it is best to put as much as possible in the FIT, with binman
-used to deal with cases not covered by FIT. Examples include initial
-execution (since FIT itself does not have an executable header) and dealing
-with device boundaries, such as the read-only/read-write separation in SPI
-flash.
-
-For U-Boot, binman should not be used to create ad-hoc images in place of
-FIT.
-
-Note that binman can itself create a FIT. This helps to move mkimage
-invocations out of the Makefile and into binman image descriptions. It also
-helps by removing the need for ad-hoc tools like `make_fit_atf.py`.
+This section builds a small image from two files, then looks inside it and
+replaces one of them. It needs nothing but binman and ``dtc``.
 
 
-Relationship to mkimage
+A first image
+-------------
+
+Start with two files to package, standing in for a first-stage loader and the
+main firmware::
+
+    $ echo 'first-stage loader' > loader.bin
+    $ echo 'main firmware' > firmware.bin
+
+Next, describe the image. It is 4KB, with any unused space filled with 0xff.
+The loader goes at the start and the firmware at offset 0x100. The ``fdtmap``
+entry stores a description of the image within it, so that binman can look
+inside the image later. The ``allow-repack`` property lets binman move entries
+around when one is replaced.
+
+Put this in ``image.dts``::
+
+    /dts-v1/;
+
+    / {
+        binman {
+            filename = "image.bin";
+            size = <0x1000>;
+            pad-byte = <0xff>;
+            allow-repack;
+
+            loader {
+                type = "blob";
+                filename = "loader.bin";
+            };
+            firmware {
+                type = "blob";
+                filename = "firmware.bin";
+                offset = <0x100>;
+            };
+            fdtmap {
+            };
+        };
+    };
+
+Build it. The ``-I`` option gives the directory holding the input files,
+``-O`` the directory to put the output in, and ``-u`` adds the position and
+size of each entry to the description, so that they are in the fdtmap::
+
+    $ binman build -u -d image.dts -I . -O out
+
+
+Looking inside an image
 -----------------------
 
-The mkimage tool provides a means to create a FIT. Traditionally it has
-needed an image description file: a devicetree, like binman, but in a
-different format. More recently it has started to support a '-f auto' mode
-which can generate that automatically.
+List the entries in the image, with their positions and sizes, in hex::
 
-More relevant to binman, mkimage also permits creation of many SoC-specific
-image types. These can be listed by running 'mkimage -T list'. Examples
-include 'rksd', the Rockchip SD/MMC boot format. The mkimage tool is often
-called from the U-Boot build system for this reason.
+    $ binman ls -i out/image.bin
+    Name        Image-pos  Size   Entry-type  Offset  Uncomp-size
+    ---------------------------------------------------------------
+    image               0   1000  section          0
+      loader            0     13  blob             0
+      firmware        100      e  blob           100
+      fdtmap          10e    266  fdtmap         10e
 
-Binman considers the output files created by mkimage to be binary blobs
-which it can place in an image. Binman does not replace the mkimage tool or
-this purpose. It would be possible in some situations to create a new entry
-type for the images in mkimage, but this would not add functionality. It
-seems better to use the mkimage tool to generate binaries and avoid blurring
-the boundaries between building input files (mkimage) and packaging then
-into a final image (binman).
+Extract an entry to a file::
 
-Note that binman can itself invoke mkimage. This helps to move mkimage
-invocations out of the Makefile and into binman image descriptions.
+    $ binman extract -i out/image.bin firmware -f firmware.out
+    $ cat firmware.out
+    main firmware
+
+
+Replacing an entry
+------------------
+
+Replace the firmware with a larger one. Binman repacks the image, moving the
+fdtmap along to make room::
+
+    $ echo 'newer main firmware' > firmware2.bin
+    $ binman replace -i out/image.bin firmware -f firmware2.bin
+    $ binman extract -i out/image.bin firmware -f firmware.out
+    $ cat firmware.out
+    newer main firmware
+
+From here, see `Image description format`_ for what a description can hold,
+`Entry Documentation`_ for the types of entry, and the sections below for
+using binman with a particular project.
 
 
 Using binman
 ============
+
+Running binman
+--------------
+
+To build the images described in a devicetree::
+
+    binman build -d image.dts -I <input-dir> -O <output-dir>
+
+The ``-d`` option gives the description, which may be a devicetree source
+(``.dts``) file or a compiled devicetree (``.dtb``). Binman looks for its
+instructions in the ``/binman`` node. The ``-I`` option adds a directory to
+search for input files and may be given more than once. Without ``-O``,
+binman uses a temporary directory, which is removed afterwards.
+
+Other useful options are:
+
+-u
+    Add the position and size of each entry to the description, e.g. for the
+    fdtmap
+
+-m
+    Write a map file for each image (see `Map files`_)
+
+-M
+    Allow external blobs and tools to be missing, producing an image which
+    builds but does not work, e.g. for build-testing
+
+-a <name>=<value>
+    Pass an argument to the entries (see
+    `Passing command-line arguments to entries`_)
+
+--project
+    Select the project which the images are for (see `U-Boot mode`_)
+
+Binman has many other options which you can see by running ``binman -h`` and
+``binman build -h``. See `Binman commands and arguments`_ for all of them, and
+``binman -H`` for this manual.
+
+
+Assembling the image description
+--------------------------------
+
+Since binman uses the devicetree for its image description, a project which
+describes its hardware with a devicetree can use the same files to describe how
+the image is assembled. Typically, the image description is then in a common
+file used by all boards with a particular SoC, and a board can override
+properties in it, or add an image of its own, just as it would for any other
+devicetree property. A project which does not use devicetree for its hardware
+simply has a devicetree file which describes the image.
+
+The description can use the C preprocessor, like any devicetree source, so a
+build system can use its configuration options in the description. For
+example, U-Boot uses its Kconfig options to vary the offset of an entry, or to
+include an entry only on boards which need it::
+
+    fit {
+        offset = <CONFIG_SPL_PAD_TO>;
+        ...
+    };
+
+    #ifdef CONFIG_HAVE_MRC
+        intel-mrc {
+                offset = <CFG_X86_MRC_ADDR>;
+        };
+    #endif
+
+When given a devicetree source (``.dts``) file, binman runs it through the C
+preprocessor before compiling it, with the input directories on the include
+path, so the description can use ``#include`` and ``#ifdef``. To use a build
+system's configuration options, as above, the build system compiles the
+description itself, with its configuration header included, and passes binman
+the compiled devicetree. U-Boot's build does this.
+
+Similarly, a build can produce several images, for example for an SPI flash
+and an SD card. There is no general harm in producing an image which is not
+used: if a board uses MMC but not SPI, but the SoC supports booting from both,
+both images can be produced, with only one being used by a particular board.
+This can reduce the number of configurations needed, for boards whose only
+difference is the boot media, enabling or disabling secure boot, etc.
+
+It is also possible to put each image in a separate file, which a board's
+description includes as needed. This is not recommended, since it is likely
+to be difficult to maintain and harder to understand the relationship
+between the different boards.
+
+
+Producing images for multiple boards
+------------------------------------
+
+Each run of binman builds the images in a single description. To build images
+for several boards, run binman once for each board's description, with a
+different output directory each time.
+
+Alternatively, a single image can include the devicetrees of several boards,
+with the firmware selecting the correct one when it boots. U-Boot's SPL does
+this, for example.
+
+
+.. _binman_syms:
+
+Access to binman entry offsets at run time (symbols)
+----------------------------------------------------
+
+Binman works out where each entry is placed in the image. This information
+is often useful to the firmware at run time: for example, a first-stage
+loader needs to find the next stage, so that it can load and run it.
+
+A program can declare symbols which binman fills in with the position and size
+of other entries, as it builds the image. For example:
+
+.. code-block:: c
+
+    binman_sym_declare(ulong, u_boot_any, image_pos);
+
+declares a ulong value which will be assigned to the image-pos of any U-Boot
+image (u-boot.bin, u-boot.img, u-boot-nodtb.bin) that is present in the image.
+You can access this value with something like:
+
+.. code-block:: c
+
+    ulong u_boot_offset = binman_sym(ulong, u_boot_any, image_pos);
+
+Thus u_boot_offset will be set to the image-pos of U-Boot in memory, assuming
+that the whole image has been loaded or is available in flash. You can then
+jump to that address to start U-Boot.
+
+As well as image-pos, it is possible to read the size of an entry and its
+offset (which is the start position of the entry within its parent).
+
+A small technical note: Binman automatically adds the base address of the
+program (e.g. ``__image_copy_start`` for U-Boot) to the value of the image-pos
+symbol, so that when the image is loaded to its linked address, the value is
+correct and actually points into the image.
+
+For example, say SPL is at the start of the image and linked to start at address
+80108000. If U-Boot's image-pos is 0x8000 then binman will write an image-pos
+for U-Boot of 80110000 into the SPL binary, since it assumes the image is loaded
+to 80108000, with SPL at 80108000 and U-Boot at 80110000. In other words, the
+positions are calculated relative to the start address of the image to which
+they are being written.
+
+For x86 devices (with the end-at-4gb property) this base address is not added
+since it is assumed that images are XIP and the offsets already include the
+address.
+
+For non-x86 cases where the symbol is used as a flash offset, the symbols-base
+property can be set to that offset (e.g. 0), so that the unadjusted image-pos
+is written into the image.
+
+U-Boot's entry types, such as ``u-boot-spl``, fill in the symbols
+automatically. For any other program, add it to the image as a blob with
+``write-symbols``, as described below. See `testBlobSymbol()` for an example.
+
+Using symbols outside U-Boot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Any project can use these symbols, not just U-Boot. Binman provides a
+standalone version of U-Boot's ``binman_sym.h`` header, which needs no
+configuration options, in the ``include/`` directory of the binman package
+(``binman/include/binman_sym.h`` in the source). To find it in an installed
+copy of binman::
+
+    python3 -c "import binman, os; print(os.path.join(os.path.dirname(binman.__file__), 'include'))"
+
+Use the header as above, with ``DECLARE_BINMAN_MAGIC_SYM`` in one source file,
+then add the binary to the image as a blob with ``write-symbols``,
+``elf-filename`` and ``elf-base-sym``, where the base symbol is one which the
+program's linker script defines at the start of the binary. For example::
+
+    my-firmware {
+        type = "blob";
+        filename = "my-firmware.bin";
+        write-symbols;
+        elf-filename = "my-firmware.elf";
+        elf-base-sym = "__start";
+    };
+
+If the ELF file does not have the base symbol, binman writes no symbols.
+
+The interface between the program and binman is:
+
+- Each symbol is named ``_binman_<entry>_prop_<property>``, where ``<entry>``
+  is the name of an entry in the image, with any hyphens changed to
+  underscores, and ``<property>`` is ``offset``, ``image_pos`` or ``size``.
+  Appending ``_any`` to the entry name matches that entry or one with the same
+  name followed by ``-elf``, ``-img`` or ``-nodtb``.
+- Symbols must be 4 or 8 bytes in size. Binman writes the value
+  little-endian, in place, at the symbol's offset from the base symbol.
+- ``offset`` is the entry's offset within its parent section and ``size`` is
+  its size. ``image_pos`` is its position in the image, plus the base address
+  described above.
+- A weak symbol, as declared by ``binman_sym_declare_optional()``, may refer to
+  an entry which does not exist, in which case binman writes -1
+  (``BINMAN_SYM_MISSING``). Otherwise this is an error.
+- Binman writes ``0x4d595342`` ('BSYM' in little-endian) into
+  ``_binman_sym_magic``, so the program can check with ``BINMAN_SYMS_OK`` that
+  the values were filled in.
+
+.. _binman_fdt:
+
+Access to binman entry offsets at run time (fdt)
+------------------------------------------------
+
+Binman can update the devicetree holding the image description with the final
+position and size of each entry in the images it processes. The option to
+enable this is -u and it causes binman to make sure that the 'offset',
+'image-pos' and 'size' properties are set correctly for every entry. Since it
+is not necessary to specify these in the image definition, binman calculates
+the final values and writes these to the devicetree. When this devicetree is
+also the firmware's own, as with U-Boot (see `U-Boot mode`_), the firmware can
+use them at run time to find the location of each entry.
+
+Alternatively, an FDT map entry can be used to add a special FDT containing
+just the information about the image. This is preceded by a magic string so can
+be located anywhere in the image. An image header (typically at the start or end
+of the image) can be used to point to the FDT map. See fdtmap and image-header
+entries for more information.
+
+Map files
+---------
+
+The -m option causes binman to output a .map file for each image that it
+generates. This shows the offset and size of each entry. For example::
+
+      Offset      Size  Name
+    00000000  00000028  main-section
+     00000000  00000010  section@0
+      00000000  00000004  u-boot
+     00000010  00000010  section@1
+      00000000  00000004  u-boot
+
+This shows a hierarchical image with two sections, each with a single entry. The
+offsets of the sections are absolute hex byte offsets within the image. The
+offsets of the entries are relative to their respective sections. The size of
+each entry is also shown, in bytes (hex). The indentation shows the entries
+nested inside their sections.
+
+
+Passing command-line arguments to entries
+-----------------------------------------
+
+Sometimes it is useful to pass binman the value of an entry property from the
+command line. For example, some entries need access to files, and it is not
+always convenient to put these filenames in the image definition (devicetree).
+
+The -a option supports this::
+
+    -a <prop>=<value>
+
+where::
+
+    <prop> is the property to set
+    <value> is the value to set it to
+
+Not all properties can be provided this way. Only some entries support it,
+typically for filenames.
+
+
+Using binman with U-Boot
+========================
+
+Binman is used by U-Boot's build to produce the images for each board. U-Boot
+also has entry types for its own binaries, e.g. ``u-boot``, ``u-boot-spl`` and
+``u-boot-dtb``.
 
 Example use of binman in U-Boot
 -------------------------------
@@ -253,11 +560,18 @@ Taking this a little further, when binman is used to create a FIT, it supports
 using an ELF file, e.g. `bl31.elf` and splitting it into separate pieces (with
 `fit,operation = "split-elf"`), each with its own load address.
 
+To build the images for a board from a U-Boot build directory by hand, use the
+``-b`` option with the board name used when configuring U-Boot, e.g.
+'sandbox' for sandbox_defconfig. Binman then takes its input files from
+``b/<board>``, or from the directory given by ``-B``::
+
+    binman build -b <board>
+
 
 .. _`U-Boot mode`:
 
 U-Boot mode
-~~~~~~~~~~~
+-----------
 
 Binman builds images for a project, chosen with the ``--project`` option:
 
@@ -321,77 +635,49 @@ use ``--project u-boot`` so that U-Boot's devicetrees are handled in the same
 way (see `U-Boot mode`_).
 
 
-Assembling the image description
---------------------------------
+Enabling binman for a board
+---------------------------
 
-Since binman uses the devicetree for its image description, you can use the
-same files that describe your board's hardware to describe how the image is
-assembled. Typically, the images description is in a common file used by all
-boards with a particular SoC (e.g. `imx8mp-u-boot.dtsi`).
+At present binman is invoked from a rule in the main Makefile. You should be
+able to enable CONFIG_BINMAN to enable this rule.
 
-Where a particular board needs to make changes, it can override properties in
-the SoC file, just as it would for any other devicetree property. It can also
-add an image that is specific to the board.
+The output file is typically named image.bin and is in the output
+directory. If input files are needed to you add these to INPUTS-y either in the
+main Makefile or in a config.mk file in your arch subdirectory.
 
-Another way to control the image description to make use of CONFIG options in
-the description. For example, if the start offset of a particular entry varies
-by board, you can add a Kconfig for that and reference it in the description::
-
-    u-boot-spl {
-    };
-
-    fit {
-        offset = <CONFIG_SPL_PAD_TO>;
-        ...
-    };
-
-The SoC can provide a default value, but boards can override that as needed and
-binman will take care of it.
-
-It is even possible to control which entries appear in the image, by using the
-C preprocessor::
-
-    #ifdef CONFIG_HAVE_MRC
-        intel-mrc {
-                offset = <CFG_X86_MRC_ADDR>;
-        };
-    #endif
-
-Only boards which enable `HAVE_MRC` will include this entry.
-
-Obviously, a similar approach can be used to control which images are produced,
-with a Kconfig option to enable a SPI image, for example. However, there is
-no general harm in producing an image that is not used. If a board uses MMC
-but not SPI, but the SoC supports booting from both, then both images can be
-produced, with only one or other being used by a particular board. This can help
-reduce the need for having multiple defconfig targets, for boards where the
-only difference is the boot media, enabling / disabling secure boot, etc.
-
-Of course, you can use the devicetree itself to pass any board-specific
-information that is needed by U-Boot at runtime (see binman_syms_ for how to
-make binman insert these values directly into executables like SPL).
-
-There is one more way this can be done: with individual .dtsi files for each
-image supported by the SoC. Then the board `.dts` file can include the ones it
-wants. This is not recommended, since it is likely to be difficult to maintain
-and harder to understand the relationship between the different boards.
+Once binman is executed it will pick up its instructions from a devicetree
+file, typically <soc>-u-boot.dtsi, where <soc> is your CONFIG_SYS_SOC value.
+You can use other, more specific CONFIG options - see 'Automatic .dtsi
+inclusion' below.
 
 
-Producing images for multiple boards
-------------------------------------
+Automatic .dtsi inclusion
+-------------------------
 
-When invoked within U-Boot, binman only builds a single set of images, for
-the chosen board. This is set by the `CONFIG_DEFAULT_DEVICE_TREE` option.
+It is sometimes inconvenient to add a 'binman' node to the .dts file for each
+board. This can be done by using #include to bring in a common file. Another
+approach supported by the U-Boot build system is to automatically include
+a common header. You can then put the binman node (and anything else that is
+specific to U-Boot, such as bootph-all properies) in that header file.
 
-However, U-Boot builds all the devicetree files associated with an
-SoC. These are written in the (e.g. for ARM) `arch/arm/dts` directory. Each of
-these contains the full binman description for that board. Often the best
-approach is to build a single image that includes all these devicetree binaries
-and allow SPL to select the correct one on boot.
+Binman will search for the following files in arch/<arch>/dts::
 
-However, it is also possible to build separate images for each board, simply by
-invoking binman multiple times, once for each devicetree file, using a
-different output directory. This will produce one set of images for each board.
+   <dts>-u-boot.dtsi where <dts> is the base name of the .dts file
+   <CONFIG_SYS_SOC>-u-boot.dtsi
+   <CONFIG_SYS_CPU>-u-boot.dtsi
+   <CONFIG_SYS_VENDOR>-u-boot.dtsi
+   u-boot.dtsi
+
+U-Boot will only use the first one that it finds. If you need to include a
+more general file you can do that from the more specific file using #include.
+If you are having trouble figuring out what is going on, you can use
+`DEVICE_TREE_DEBUG=1` with your build::
+
+   make DEVICE_TREE_DEBUG=1
+   scripts/Makefile.lib:334: Automatic .dtsi inclusion: options:
+     arch/arm/dts/juno-r2-u-boot.dtsi arch/arm/dts/-u-boot.dtsi
+     arch/arm/dts/armv8-u-boot.dtsi arch/arm/dts/armltd-u-boot.dtsi
+     arch/arm/dts/u-boot.dtsi ... found: "arch/arm/dts/juno-r2-u-boot.dtsi"
 
 
 Example use of binman for x86
@@ -409,254 +695,175 @@ Binman is intended to replace all of this, with ifdtool left to handle only
 the configuration of the Intel-format descriptor.
 
 
-Installing binman
------------------
+Relationship to FIT
+-------------------
 
-First install prerequisites, e.g:
+FIT is U-Boot's official image format. It supports multiple binaries with
+load / execution addresses, compression. It also supports verification
+through hashing and RSA signatures.
 
-.. code-block:: bash
+FIT was originally designed to support booting a Linux kernel (with an
+optional ramdisk) and devicetree chosen from assorted options in the FIT.
+Now that U-Boot supports configuration via devicetree, it is possible to
+load U-Boot from a FIT, with the devicetree chosen by SPL.
 
-    sudo apt-get install python-pyelftools python3-pyelftools lzma-alone \
-        liblz4-tool
+Binman considers FIT to be one of the binaries it can place in the image.
 
-You can run binman directly if you put it on your PATH. But if you want to
-install into your `~/.local` Python directory, use:
+Where possible it is best to put as much as possible in the FIT, with binman
+used to deal with cases not covered by FIT. Examples include initial
+execution (since FIT itself does not have an executable header) and dealing
+with device boundaries, such as the read-only/read-write separation in SPI
+flash.
 
-.. code-block:: bash
+For U-Boot, binman should not be used to create ad-hoc images in place of
+FIT.
 
-    pip install tools/patman tools/dtoc tools/binman
-
-Note that binman makes use of libraries from patman and dtoc, which is why these
-need to be installed. Also you need `libfdt` and `pylibfdt` which can be
-installed like this:
-
-.. code-block:: bash
-
-   git clone git://git.kernel.org/pub/scm/utils/dtc/dtc.git
-   cd dtc
-   pip install .
-   make NO_PYTHON=1 install
-
-This installs the `libfdt.so` library into `~/lib` so you can use
-`LD_LIBRARY_PATH=~/lib` when running binman. If you want to install it in the
-system-library directory, replace the last line with:
-
-.. code-block:: bash
-
-   make NO_PYTHON=1 PREFIX=/ install
-
-Running binman
---------------
-
-Type:
-
-.. code-block:: bash
-
-   make NO_PYTHON=1 PREFIX=/ install
-    binman build -b <board_name>
-
-to build an image for a board. The board name is the same name used when
-configuring U-Boot (e.g. for sandbox_defconfig the board name is 'sandbox').
-Binman assumes that the input files for the build are in ../b/<board_name>.
-
-Or you can specify this explicitly:
-
-.. code-block:: bash
-
-   make NO_PYTHON=1 PREFIX=/ install
-    binman build -I <build_path>
-
-where <build_path> is the build directory containing the output of the U-Boot
-build.
-
-(Future work will make this more configurable)
-
-In either case, binman picks up the devicetree file (u-boot.dtb) and looks
-for its instructions in the 'binman' node.
-
-Binman has a few other options which you can see by running 'binman -h'.
+Note that binman can itself create a FIT. This helps to move mkimage
+invocations out of the Makefile and into binman image descriptions. It also
+helps by removing the need for ad-hoc tools like `make_fit_atf.py`.
 
 
-Enabling binman for a board
----------------------------
+Relationship to mkimage
+-----------------------
 
-At present binman is invoked from a rule in the main Makefile. You should be
-able to enable CONFIG_BINMAN to enable this rule.
+The mkimage tool provides a means to create a FIT. Traditionally it has
+needed an image description file: a devicetree, like binman, but in a
+different format. More recently it has started to support a '-f auto' mode
+which can generate that automatically.
 
-The output file is typically named image.bin and is in the output
-directory. If input files are needed to you add these to INPUTS-y either in the
-main Makefile or in a config.mk file in your arch subdirectory.
+More relevant to binman, mkimage also permits creation of many SoC-specific
+image types. These can be listed by running 'mkimage -T list'. Examples
+include 'rksd', the Rockchip SD/MMC boot format. The mkimage tool is often
+called from the U-Boot build system for this reason.
 
-Once binman is executed it will pick up its instructions from a devicetree
-file, typically <soc>-u-boot.dtsi, where <soc> is your CONFIG_SYS_SOC value.
-You can use other, more specific CONFIG options - see 'Automatic .dtsi
-inclusion' below.
+Binman considers the output files created by mkimage to be binary blobs
+which it can place in an image. Binman does not replace the mkimage tool or
+this purpose. It would be possible in some situations to create a new entry
+type for the images in mkimage, but this would not add functionality. It
+seems better to use the mkimage tool to generate binaries and avoid blurring
+the boundaries between building input files (mkimage) and packaging then
+into a final image (binman).
 
-.. _binman_syms:
+Note that binman can itself invoke mkimage. This helps to move mkimage
+invocations out of the Makefile and into binman image descriptions.
 
-Access to binman entry offsets at run time (symbols)
-----------------------------------------------------
 
-Binman assembles images and determines where each entry is placed in the image.
-This information may be useful to U-Boot at run time. For example, in SPL it
-is useful to be able to find the location of U-Boot so that it can be executed
-when SPL is finished.
+Using binman with coreboot
+==========================
 
-Binman allows you to declare symbols in the SPL image which are filled in
-with their correct values during the build. For example:
+Binman works with coreboot images through the ``coreboot-rom`` entry type,
+which uses coreboot's ``cbfstool`` to add each file to the CBFS, so that the
+result matches what coreboot's own build produces. Binman can fetch
+``cbfstool`` with ``binman tool -f cbfstool``, or use the one built by
+coreboot, with ``--toolpath``.
 
-.. code-block:: c
+Adding files to a coreboot image
+--------------------------------
 
-    binman_sym_declare(ulong, u_boot_any, image_pos);
+Starting from an image built by coreboot, binman can add a payload and other
+files to its CBFS, replacing any already there. For example, to add SeaBIOS
+as the payload, with a file which configures it::
 
-declares a ulong value which will be assigned to the image-pos of any U-Boot
-image (u-boot.bin, u-boot.img, u-boot-nodtb.bin) that is present in the image.
-You can access this value with something like:
+    rom {
+        filename = "coreboot-seabios.rom";
+        coreboot-rom {
+            coreboot-filename = "coreboot.rom";
 
-.. code-block:: c
-
-    ulong u_boot_offset = binman_sym(ulong, u_boot_any, image_pos);
-
-Thus u_boot_offset will be set to the image-pos of U-Boot in memory, assuming
-that the whole image has been loaded or is available in flash. You can then
-jump to that address to start U-Boot.
-
-At present this feature is only supported in SPL and TPL. In principle it is
-possible to fill in such symbols in U-Boot proper, as well, but a future C
-library is planned for this instead, to read from the devicetree.
-
-As well as image-pos, it is possible to read the size of an entry and its
-offset (which is the start position of the entry within its parent).
-
-A small technical note: Binman automatically adds the base address of the image
-(i.e. __image_copy_start) to the value of the image-pos symbol, so that when the
-image is loaded to its linked address; the value will be correct and actually
-point into the image.
-
-For example, say SPL is at the start of the image and linked to start at address
-80108000. If U-Boot's image-pos is 0x8000 then binman will write an image-pos
-for U-Boot of 80110000 into the SPL binary, since it assumes the image is loaded
-to 80108000, with SPL at 80108000 and U-Boot at 80110000. In other words, the
-positions are calculated relative to the start address of the image to which
-they are being written.
-
-For x86 devices (with the end-at-4gb property) this base address is not added
-since it is assumed that images are XIP and the offsets already include the
-address.
-
-For non-x86 cases where the symbol is used as a flash offset, the symbols-base
-property can be set to that offset (e.g. 0), so that the unadjusted image-pos
-is written into the image.
-
-While U-Boot's symbol updating is handled automatically by the u-boot-spl
-entry type (and others), it is possible to use this feature with any blob. To
-do this, add a `write-symbols` (boolean) property to the node, set the ELF
-filename using `elf-filename` and set 'elf-base-sym' to the base symbol for the
-start of the binary image (this defaults to `__image_copy_start` which is what
-U-Boot uses). See `testBlobSymbol()` for an example.
-
-Using symbols outside U-Boot
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Any project can use these symbols, not just U-Boot. Binman provides a
-standalone version of U-Boot's ``binman_sym.h`` header, which needs no
-configuration options, in the ``include/`` directory of the binman package
-(``binman/include/binman_sym.h`` in the source). To find it in an installed
-copy of binman::
-
-    python3 -c "import binman, os; print(os.path.join(os.path.dirname(binman.__file__), 'include'))"
-
-Use the header as above, with ``DECLARE_BINMAN_MAGIC_SYM`` in one source file,
-then add the binary to the image as a blob with ``write-symbols``,
-``elf-filename`` and ``elf-base-sym``, where the base symbol is one which the
-program's linker script defines at the start of the binary. For example::
-
-    my-firmware {
-        type = "blob";
-        filename = "my-firmware.bin";
-        write-symbols;
-        elf-filename = "my-firmware.elf";
-        elf-base-sym = "__start";
+            seabios {
+                type = "blob";
+                filename = "bios.bin.elf";
+                cbfs-name = "fallback/payload";
+                cbfs-type = "payload";
+            };
+            boot-menu-wait {
+                type = "text";
+                text = "2000";
+                cbfs-name = "etc/boot-menu-wait";
+            };
+        };
     };
 
-If the ELF file does not have the base symbol, binman writes no symbols.
+This is a convenient way to try a different payload, or to add
+configuration, without rebuilding coreboot. Binman can also build U-Boot as
+coreboot's payload, from U-Boot's own entry types: see :ref:`etype_coreboot_rom`.
 
-The interface between the program and binman is:
+Building a coreboot image
+-------------------------
 
-- Each symbol is named ``_binman_<entry>_prop_<property>``, where ``<entry>``
-  is the name of an entry in the image, with any hyphens changed to
-  underscores, and ``<property>`` is ``offset``, ``image_pos`` or ``size``.
-  Appending ``_any`` to the entry name matches that entry or one with the same
-  name followed by ``-elf``, ``-img`` or ``-nodtb``.
-- Symbols must be 4 or 8 bytes in size. Binman writes the value
-  little-endian, in place, at the symbol's offset from the base symbol.
-- ``offset`` is the entry's offset within its parent section and ``size`` is
-  its size. ``image_pos`` is its position in the image, plus the base address
-  described above.
-- A weak symbol, as declared by ``binman_sym_declare_optional()``, may refer to
-  an entry which does not exist, in which case binman writes -1
-  (``BINMAN_SYM_MISSING``). Otherwise this is an error.
-- Binman writes ``0x4d595342`` ('BSYM' in little-endian) into
-  ``_binman_sym_magic``, so the program can check with ``BINMAN_SYMS_OK`` that
-  the values were filled in.
+Binman can also build a coreboot image from the pieces which coreboot's build
+produces, laying it out from the board's flash-map descriptor (``.fmd`` file).
+Binman reads the descriptor itself, working out the layout and producing the
+same flash map (FMAP) as coreboot's ``fmaptool``, then adds each file to the
+CBFS region it belongs in, with the arguments which coreboot's build passes to
+``cbfstool``, such as ``--xip`` for an execute-in-place stage. Data for a
+region which is not a CBFS, such as one for vital product data, is written
+straight into the region. For example::
 
-.. _binman_fdt:
+    coreboot-rom {
+        fmd-filename = "build/fmap.fmd";
 
-Access to binman entry offsets at run time (fdt)
-------------------------------------------------
+        bootblock {
+            type = "blob";
+            filename = "build/cbfs/fallback/bootblock.bin";
+            cbfs-name = "bootblock";
+            cbfs-type = "bootblock";
+            cbfs-options = "-b", "-16384";
+        };
+        romstage {
+            type = "blob";
+            filename = "build/cbfs/fallback/romstage.elf";
+            cbfs-name = "fallback/romstage";
+            cbfs-type = "stage";
+            cbfs-options = "-r", "COREBOOT", "-S", ".car.data,.data", "--xip";
+        };
+        vpd {
+            type = "blob";
+            filename = "vpd.bin";
+            fmap-region = "RO_VPD";
+            cbfs-options = "-u";
+        };
+    };
 
-Binman can update the U-Boot FDT to include the final position and size of
-each entry in the images it processes. The option to enable this is -u and it
-causes binman to make sure that the 'offset', 'image-pos' and 'size' properties
-are set correctly for every entry. Since it is not necessary to specify these in
-the image definition, binman calculates the final values and writes these to
-the devicetree. These can be used by U-Boot at run-time to find the location
-of each entry.
-
-Alternatively, an FDT map entry can be used to add a special FDT containing
-just the information about the image. This is preceded by a magic string so can
-be located anywhere in the image. An image header (typically at the start or end
-of the image) can be used to point to the FDT map. See fdtmap and image-header
-entries for more information.
-
-Map files
----------
-
-The -m option causes binman to output a .map file for each image that it
-generates. This shows the offset and size of each entry. For example::
-
-      Offset      Size  Name
-    00000000  00000028  main-section
-     00000000  00000010  section@0
-      00000000  00000004  u-boot
-     00000010  00000010  section@1
-      00000000  00000004  u-boot
-
-This shows a hierarchical image with two sections, each with a single entry. The
-offsets of the sections are absolute hex byte offsets within the image. The
-offsets of the entries are relative to their respective sections. The size of
-each entry is also shown, in bytes (hex). The indentation shows the entries
-nested inside their sections.
+A build system can generate such a description from its list of CBFS files.
+Since binman runs ``cbfstool`` for each file, in the same order and with the
+same arguments, the image is the same as the one which coreboot's build
+produces. See :ref:`etype_coreboot_rom` for all the properties.
 
 
-Passing command-line arguments to entries
------------------------------------------
+Using binman with other projects
+================================
 
-Sometimes it is useful to pass binman the value of an entry property from the
-command line. For example, some entries need access to files, and it is not
-always convenient to put these filenames in the image definition (devicetree).
+Binman can package the firmware for any project, such as Zephyr, TF-A, OP-TEE
+or a product which combines several of them. A project's build runs binman as
+its last step, or a separate packaging step runs it on the outputs of several
+projects. Nothing in binman depends on U-Boot unless binman is building
+U-Boot's images (see `U-Boot mode`_).
 
-The -a option supports this::
+The image description is a devicetree, which can be a file of its own: it does
+not need to be part of the devicetree which describes the project's hardware.
+The ``blob`` and ``blob-ext`` entry types place any file in the image, and
+``section``, ``fill``, ``text`` and ``files`` cover most other needs. There
+are also entry types for the binaries and formats of particular projects, such
+as ``atf-bl31`` and ``atf-fip`` for TF-A, ``tee-os`` for OP-TEE, ``opensbi``
+for RISC-V and ``fit`` for FIT images. See `Entry Documentation`_ for them
+all.
 
-    -a <prop>=<value>
+To let a program find the other parts of the image at run time, use the
+symbols which binman fills in, with binman's standalone header (see
+`Using symbols outside U-Boot`_), or read the fdtmap, which describes the
+image and can be found from an image header (see
+`Access to binman entry offsets at run time (fdt)`_).
 
-where::
+Binaries which come from other projects, such as vendor blobs, can be marked
+as external, so that the image can still be built, e.g. by a CI system which
+does not have them (see `External blobs`_). Binman can also fetch such blobs,
+building them from source where it can, or downloading them from a blob store
+(see `Fetching firmware blobs`_).
 
-    <prop> is the property to set
-    <value> is the value to set it to
-
-Not all properties can be provided this way. Only some entries support it,
-typically for filenames.
+Where an image needs a format which binman does not support, add an entry type
+for it. The ``--etype-dir`` option lets you develop the entry type outside
+binman, with an installed copy of binman, before sending it to binman: see
+'Developing entry types' in binman's documentation.
 
 
 Image description format
@@ -1277,35 +1484,6 @@ size of a section indicates the space that it consumes in its parent section
 and the uncomp-size property indicates that, as above. The contents of the
 section is compressed first, before any padding is added. This ensures that the
 padding itself is not compressed, which would be a waste of time.
-
-
-Automatic .dtsi inclusion
--------------------------
-
-It is sometimes inconvenient to add a 'binman' node to the .dts file for each
-board. This can be done by using #include to bring in a common file. Another
-approach supported by the U-Boot build system is to automatically include
-a common header. You can then put the binman node (and anything else that is
-specific to U-Boot, such as bootph-all properies) in that header file.
-
-Binman will search for the following files in arch/<arch>/dts::
-
-   <dts>-u-boot.dtsi where <dts> is the base name of the .dts file
-   <CONFIG_SYS_SOC>-u-boot.dtsi
-   <CONFIG_SYS_CPU>-u-boot.dtsi
-   <CONFIG_SYS_VENDOR>-u-boot.dtsi
-   u-boot.dtsi
-
-U-Boot will only use the first one that it finds. If you need to include a
-more general file you can do that from the more specific file using #include.
-If you are having trouble figuring out what is going on, you can use
-`DEVICE_TREE_DEBUG=1` with your build::
-
-   make DEVICE_TREE_DEBUG=1
-   scripts/Makefile.lib:334: Automatic .dtsi inclusion: options:
-     arch/arm/dts/juno-r2-u-boot.dtsi arch/arm/dts/-u-boot.dtsi
-     arch/arm/dts/armv8-u-boot.dtsi arch/arm/dts/armltd-u-boot.dtsi
-     arch/arm/dts/u-boot.dtsi ... found: "arch/arm/dts/juno-r2-u-boot.dtsi"
 
 
 Templates
