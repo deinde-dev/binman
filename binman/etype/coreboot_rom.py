@@ -8,6 +8,7 @@ from collections import namedtuple
 import os
 
 from binman import elf
+from binman import fmd_util
 from binman.entry import Entry, EntryArg
 from binman.etype.section import Entry_section
 from dtoc import fdt_util
@@ -22,8 +23,10 @@ from u_boot_pylib import tools
 # load (int): Load address, for a flat binary
 # entry_addr (int): Entry address, for a flat binary
 # options (list of str): Further arguments for cbfstool
-CbfsFile = namedtuple('CbfsFile',
-                      'entry,name,ftype,compress,load,entry_addr,options')
+# region (str): Flash-map region to write the data to, instead of adding it to
+#    the CBFS, or None
+CbfsFile = namedtuple(
+    'CbfsFile', 'entry,name,ftype,compress,load,entry_addr,options,region')
 
 class Entry_coreboot_rom(Entry_section):
     """Coreboot ROM image, updated to contain the given payload
@@ -50,8 +53,13 @@ class Entry_coreboot_rom(Entry_section):
         - fmap-filename: Binary flash map (FMAP) from which to create a new
             image, instead of starting from a coreboot ROM. It is looked up in
             the input directories
+        - fmd-filename: Flash-map descriptor (fmd file), as used by coreboot,
+            from which to create a new image, instead of an FMAP. Binman works
+            out the layout and produces the FMAP in the same way as coreboot's
+            fmaptool. It is looked up in the input directories
         - cbfs-regions: Regions of the flash map which hold a CBFS, separated
-            by commas, defaulting to "COREBOOT"
+            by commas. This defaults to the regions with the CBFS flag in the
+            fmd file, else to "COREBOOT"
 
     This supports building U-Boot as a coreboot payload: the coreboot build
     provides everything up to the payload (bootblock, romstage, ramstage,
@@ -86,8 +94,11 @@ class Entry_coreboot_rom(Entry_section):
     Instead of building a single payload, each subnode can be added to the
     CBFS as a file of its own, by giving it a 'cbfs-name' property. This
     works with any payload and other files, such as SeaBIOS and its VGA
-    ROM. If any subnode has 'cbfs-name' then all of them must have it. The
-    properties of each subnode are:
+    ROM. A subnode can instead be written to a region of the flash map
+    which is not a CBFS, such as one for vital product data, by giving it
+    an 'fmap-region' property. If any subnode has 'cbfs-name' or
+    'fmap-region' then all of them must have one of these. The properties of
+    each subnode are:
 
         - cbfs-name: Name of the file in CBFS. Any existing file of this name
             is removed first
@@ -113,7 +124,10 @@ class Entry_coreboot_rom(Entry_section):
             cbfstool's default, which is no compression
         - cbfs-options: Further arguments for cbfstool, as a list of strings,
             e.g. the region with "-r", "COREBOOT", a position with "-b" or an
-            alignment with "-a"
+            alignment with "-a". For 'fmap-region', "-u" fills the rest of the
+            region, after the data
+        - fmap-region: Name of the region to write the data to, instead of
+            adding it to a CBFS
 
     For example, to boot SeaBIOS on coreboot, with a file to configure it::
 
@@ -139,15 +153,15 @@ class Entry_coreboot_rom(Entry_section):
     Creating an image
     ~~~~~~~~~~~~~~~~~
 
-    With 'fmap-filename', the entry creates a new image laid out by a
-    coreboot flash map, with an empty CBFS in each region given by
-    'cbfs-regions', then adds each subnode as a file. This allows binman to
+    With 'fmap-filename' or 'fmd-filename', the entry creates a new image
+    laid out by a coreboot flash map, with an empty CBFS in each region given
+    by 'cbfs-regions', then adds each subnode as a file. This allows binman to
     build a coreboot image from the pieces which coreboot's build produces,
     still using cbfstool to add each one. For example, on x86, where the
     bootblock goes at the end of the CBFS::
 
         coreboot-rom {
-            fmap-filename = "build/fmap.fmap";
+            fmd-filename = "build/fmap.fmd";
 
             bootblock {
                 type = "blob";
@@ -185,16 +199,22 @@ class Entry_coreboot_rom(Entry_section):
         self._cbfs_compress = fdt_util.GetString(self._node, 'cbfs-compress',
                                                  'lzma')
         self._fmap_fname = fdt_util.GetString(self._node, 'fmap-filename')
-        self._cbfs_regions = fdt_util.GetString(self._node, 'cbfs-regions',
-                                                'COREBOOT')
+        self._fmd_fname = fdt_util.GetString(self._node, 'fmd-filename')
+        if self._fmap_fname and self._fmd_fname:
+            self.Raise("Use either 'fmap-filename' or 'fmd-filename'")
+        self._cbfs_regions = fdt_util.GetString(self._node, 'cbfs-regions')
 
-        # Subnodes with a 'cbfs-name' are each added as a file of their own
+        # Subnodes with a 'cbfs-name' or 'fmap-region' are each added as a
+        # file of their own, or written to a region
         self._files = []
         for entry in self.GetEntries().values():
             node = entry._node
             name = fdt_util.GetString(node, 'cbfs-name')
-            if not name:
+            region = fdt_util.GetString(node, 'fmap-region')
+            if not name and not region:
                 continue
+            if name and region:
+                entry.Raise("Use either 'cbfs-name' or 'fmap-region'")
             ftype = fdt_util.GetString(node, 'cbfs-type', 'raw')
             compress = fdt_util.GetString(
                 node, 'cbfs-compress',
@@ -205,9 +225,10 @@ class Entry_coreboot_rom(Entry_section):
             entry_addr = fdt_util.GetInt(node, 'cbfs-entry-addr', load)
             options = fdt_util.GetStringList(node, 'cbfs-options', [])
             self._files.append(CbfsFile(entry, name, ftype, compress, load,
-                                        entry_addr, options))
+                                        entry_addr, options, region))
         if self._files and len(self._files) != len(self.GetEntries()):
-            self.Raise("Either all subnodes or none must have 'cbfs-name'")
+            self.Raise("Either all subnodes or none must have 'cbfs-name' or "
+                       "'fmap-region'")
 
     def _FindElfFname(self, entry):
         """Find the ELF filename for an entry, recursing into any subnodes
@@ -296,18 +317,22 @@ class Entry_coreboot_rom(Entry_section):
 
         # Start from a new image laid out by a flash map, or from a ROM
         pathname = tools.get_input_filename(
-            self._fmap_fname or self._coreboot_fname,
+            self._fmd_fname or self._fmap_fname or self._coreboot_fname,
             self.section.GetAllowMissing())
         if not pathname:
             self.missing = True
             return tools.get_bytes(0, 1024)
         uniq = self.GetUniqueName()
         rom_fname = tools.get_output_filename(f'coreboot-rom.{uniq}')
-        if self._fmap_fname:
+        regions = self._cbfs_regions or 'COREBOOT'
+        if self._fmd_fname:
+            pathname, fmd_regions = self._ReadFmd(pathname, uniq)
+            regions = self._cbfs_regions or fmd_regions
+        if self._fmap_fname or self._fmd_fname:
             if os.path.exists(rom_fname):
                 os.remove(rom_fname)
             if self.cbfstool.create_from_fmap(rom_fname, pathname,
-                                              self._cbfs_regions) is None:
+                                              regions) is None:
                 self.record_missing_bintool(self.cbfstool)
                 return tools.get_bytes(0, 1024)
         else:
@@ -336,10 +361,37 @@ class Entry_coreboot_rom(Entry_section):
 
         return tools.read_file(rom_fname)
 
+    def _ReadFmd(self, pathname, uniq):
+        """Read a flash-map descriptor and write the FMAP which it describes
+
+        Args:
+            pathname (str): Path to the fmd file
+            uniq (str): Unique name to use for the FMAP file
+
+        Returns:
+            tuple:
+                str: Path to the FMAP file
+                str: Regions which hold a CBFS, separated by commas, the
+                    primary CBFS first
+
+        Raises:
+            ValueError: The fmd file is not valid
+        """
+        try:
+            root, cbfs = fmd_util.read_fmd(tools.read_file(pathname,
+                                                           binary=False))
+            fmap = fmd_util.encode_fmap(root)
+        except fmd_util.FmdError as exc:
+            self.Raise(f"Flash-map descriptor '{self._fmd_fname}': {exc}")
+        fmap_fname = tools.get_output_filename(f'fmap.{uniq}')
+        tools.write_file(fmap_fname, fmap)
+        return fmap_fname, ','.join(region.name for region in cbfs)
+
     def _AddFile(self, rom_fname, cfile, fname, data):
         """Add a file to the CBFS in the ROM, replacing any of the same name
 
-        A new image created from a flash map has no files to replace.
+        A new image created from a flash map has no files to replace. A file
+        with a region is written to that region of the flash map instead.
 
         Args:
             rom_fname (str): Filename of the ROM to update
@@ -350,10 +402,14 @@ class Entry_coreboot_rom(Entry_section):
         Returns:
             bool: True if the file was added, False if cbfstool is missing
         """
+        if cfile.region:
+            out = self.cbfstool.write_region(rom_fname, cfile.region, fname,
+                                             cfile.options)
+            return out is not None
         if cfile.ftype in ('payload', 'stage') and data[:4] != b'\x7fELF':
             cfile.entry.Raise(
                 f"cbfs-type '{cfile.ftype}' needs an ELF file")
-        if not self._fmap_fname:
+        if not self._fmap_fname and not self._fmd_fname:
             self.cbfstool.remove(rom_fname, cfile.name)
         options = list(cfile.options)
         if cfile.ftype == 'flat':

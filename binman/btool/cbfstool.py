@@ -257,6 +257,22 @@ class Bintoolcbfstool(bintool.Bintool):
             ]
         return self.run_cmd(*args)
 
+    def write_region(self, cbfs_fname, region, fname, options=None):
+        """Write a file to a region of the flash map
+
+        Args:
+            cbfs_fname (str): Filename of the image to update
+            region (str): Name of the region, e.g. 'GBB'
+            fname (str): Filename of file to write
+            options (list of str): Further arguments for cbfstool, e.g. ['-u']
+                to fill the rest of the region from the start of the file
+
+        Returns:
+            str: Tool output
+        """
+        args = [cbfs_fname, 'write', '-r', region, '-f', fname]
+        return self.run_cmd(*args, *(options or []))
+
     def remove(self, cbfs_fname, name):
         """Remove a file from the CBFS
 

@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0+
+
+/dts-v1/;
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	binman {
+		coreboot-rom {
+			fmd-filename = "cbrom.fmd";
+			fmap-filename = "cbrom.fmap";
+
+			bootblock {
+				type = "blob";
+				filename = "cbrom-bootblock.bin";
+				cbfs-name = "bootblock";
+				cbfs-type = "bootblock";
+			};
+		};
+	};
+};

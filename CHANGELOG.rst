@@ -22,6 +22,11 @@ Added
   ``cbfs-options`` gives further arguments for cbfstool, such as a position
   or alignment. This allows binman to build a coreboot image from the pieces
   which coreboot's build produces.
+- The ``coreboot-rom`` entry type can also create an image from a coreboot
+  flash-map descriptor (fmd file), with ``fmd-filename``. Binman works out the
+  layout and produces the same FMAP as coreboot's fmaptool. A file can be
+  written to a region of the flash map which is not a CBFS, with
+  ``fmap-region``.
 
 Changed
 ~~~~~~~

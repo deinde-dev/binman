@@ -36,6 +36,7 @@ from binman import elf
 from binman import elf_test
 from binman import fip_util
 from binman import fmap_util
+from binman import fmd_util
 from binman import state
 from dtoc import fdt
 from dtoc import fdt_util
@@ -3255,6 +3256,83 @@ class TestFunctional(unittest.TestCase):
                              force_missing_bintools='cbfstool')
         self.assertRegex(stderr.getvalue(),
                          "Image 'image'.*missing bintools.*: cbfstool")
+
+    def _SetupCorebootFmd(self):
+        """Set up the inputs to create a coreboot image from an fmd file
+
+        The layout has two CBFS regions, as with vboot, and a region for data
+        which is preserved by firmware updates
+
+        Returns:
+            str: Contents of the fmd file
+        """
+        fmd = '''
+FLASH@0xffff0000 0x10000 {
+    RW_SECTION_A 0x4000 {
+        FW_MAIN_A(CBFS)
+    }
+    WP_RO {
+        FMAP 0x200
+        RO_VPD(PRESERVE) 0x100
+        COREBOOT(CBFS)
+    }
+}
+'''
+        self._MakeInputFile('cbrom.fmd', fmd.encode('utf-8'))
+        self._MakeInputFile('cbrom-bad.fmd', b'FLASH 0x1000 { A 0x2000 }')
+        self._MakeInputFile('cbrom-bootblock.bin', tools.get_bytes(0xbb, 64))
+        return fmd
+
+    def testCorebootRomFmd(self):
+        """Test creating a coreboot image from a flash-map descriptor"""
+        fmd = self._SetupCorebootFmd()
+        data = self._DoReadFile('cbfs/coreboot_rom_fmd.dts')
+        self.assertEqual(0x10000, len(data))
+
+        # The FMAP matches the one produced from the descriptor
+        root, _ = fmd_util.read_fmd(fmd)
+        fmap = fmd_util.encode_fmap(root)
+        self.assertEqual(fmap, data[0x4000:0x4000 + len(fmap)])
+
+        # The data is written to the region, filling the rest
+        self.assertEqual(b'vpd-data', data[0x4200:0x4208])
+        self.assertEqual(tools.get_bytes(0xff, 0x100 - 8),
+                         data[0x4208:0x4300])
+
+        # The files are in the CBFS regions
+        self.assertEqual(tools.get_bytes(0xbb, 64), data[-64:])
+        cbfstool = bintool.Bintool.create('cbfstool')
+        fname = tools.get_output_filename('check.rom')
+        tools.write_file(fname, data)
+        out = cbfstool.run_cmd(fname, 'print', '-r', 'FW_MAIN_A')
+        self.assertIn('config', out)
+        out = cbfstool.run_cmd(fname, 'print', '-r', 'COREBOOT')
+        self.assertIn('bootblock', out)
+        self.assertNotIn('config', out)
+
+    def testCorebootRomFmdBad(self):
+        """Test creating a coreboot image from a bad flash-map descriptor"""
+        self._SetupCorebootFmd()
+        with self.assertRaises(ValueError) as e:
+            self._DoReadFile('cbfs/coreboot_rom_fmd_bad.dts')
+        self.assertIn("Flash-map descriptor 'cbrom-bad.fmd': Section 'A' too "
+                      'big', str(e.exception))
+
+    def testCorebootRomFmdAndFmap(self):
+        """Test giving both a flash-map descriptor and a flash map"""
+        self._SetupCorebootFmd()
+        with self.assertRaises(ValueError) as e:
+            self._DoReadFile('cbfs/coreboot_rom_fmd_both.dts')
+        self.assertIn("Use either 'fmap-filename' or 'fmd-filename'",
+                      str(e.exception))
+
+    def testCorebootRomRegionAndName(self):
+        """Test giving a file both a CBFS name and a region"""
+        self._SetupCorebootFmd()
+        with self.assertRaises(ValueError) as e:
+            self._DoReadFile('cbfs/coreboot_rom_fmd_region_name.dts')
+        self.assertIn("Use either 'cbfs-name' or 'fmap-region'",
+                      str(e.exception))
 
     def testCorebootRomFilesMissingBintool(self):
         """Test adding files to a coreboot ROM with cbfstool missing"""
