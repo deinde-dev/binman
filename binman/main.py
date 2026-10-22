@@ -24,7 +24,6 @@ sys.path.insert(2, os.path.dirname(our_path))
 from binman import bintool
 from binman import cmdline
 from binman import control
-from u_boot_pylib import test_util
 
 def RunTests(debug, verbosity, processes, test_preserve_dirs, args, toolpath):
     """Run the functional tests and any embedded doctests
@@ -55,6 +54,7 @@ def RunTests(debug, verbosity, processes, test_preserve_dirs, args, toolpath):
     from binman import blob
     from binman import blobstore
     import doctest
+    from u_boot_pylib import test_util
 
     # Keep the tests away from the user's blob configuration, so that it does
     # not affect them. Tests which need a configuration provide their own
@@ -96,6 +96,8 @@ def RunTestCoverage(toolpath, build_dir, args):
         for path in toolpath:
             extra_args += ' --toolpath %s' % path
 
+    from u_boot_pylib import test_util
+
     test_util.run_test_coverage(os.path.join(our_path, 'main.py'), None,
             ['*test*', '*main.py', '*/dtoc/*', '*/u_boot_pylib/*'],
             build_dir, all_set, extra_args or None, args=args,
@@ -119,6 +121,9 @@ def RunBinman(args):
         args.toolpath = ['./tools', 'build-sandbox/tools']
 
     if args.cmd == 'test':
+        # Only the tests need this, and it takes a while to import
+        from u_boot_pylib import test_util
+
         if args.test_coverage:
             RunTestCoverage(args.toolpath, args.build_dir, args.tests)
         else:
