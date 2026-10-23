@@ -19,6 +19,7 @@ jobs:
   uboot-tools:
     name: Build the U-Boot tools
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Restore the tools from the cache
         id: cache
@@ -54,6 +55,7 @@ jobs:
     name: Test (Python ${{ matrix.python-version }})
     needs: uboot-tools
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -136,6 +138,7 @@ jobs:
     name: Test (latest deps, Python 3.12)
     needs: uboot-tools
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -183,6 +186,7 @@ jobs:
   package:
     name: Build and check the package
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
