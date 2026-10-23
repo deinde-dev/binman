@@ -1,5 +1,6 @@
 concurrencytest==0.1.11
 coverage==7.16.2
+dtoc==0.1.0
 jsonschema==4.26.0
 pycryptodomex==3.24.1
 pyelftools==0.33
