@@ -19,6 +19,7 @@ jobs:
   uboot-tools:
     name: Build the U-Boot tools
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Restore the tools from the cache
         id: cache
@@ -54,6 +55,7 @@ jobs:
     name: Test (Python ${{ matrix.python-version }})
     needs: uboot-tools
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -73,13 +75,17 @@ jobs:
       # bootgen from the distro, along with the dependencies for building
       # cst (byacc, libssl-dev) and futility (uuid-dev), which binman
       # fetches below. The FIT-signing tests use OpenSSL's PKCS#11 engine
-      # (libengine-pkcs11-openssl).
+      # (libengine-pkcs11-openssl). Also install the bintools which binman
+      # would otherwise fetch with apt, so that the fetch step below makes
+      # no further calls to apt. The tests check fetching with apt using a
+      # fake 'sudo' (test_apt_install_missing).
       - name: Install system packages
         run: |
           sudo apt-get update
           sudo apt-get install -y arm-trusted-firmware-tools byacc \
             device-tree-compiler gcc-multilib libengine-pkcs11-openssl \
-            libssl-dev python3-dev swig uuid-dev xilinx-bootgen
+            libssl-dev lzma-alone lzop opensc python3-dev softhsm2 swig \
+            uuid-dev xilinx-bootgen
 
       - name: Download the U-Boot tools
         uses: actions/download-artifact@v8
@@ -132,6 +138,7 @@ jobs:
     name: Test (latest deps, Python 3.12)
     needs: uboot-tools
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -146,7 +153,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y arm-trusted-firmware-tools byacc \
             device-tree-compiler gcc-multilib libengine-pkcs11-openssl \
-            libssl-dev python3-dev swig uuid-dev xilinx-bootgen
+            libssl-dev lzma-alone lzop opensc python3-dev softhsm2 swig \
+            uuid-dev xilinx-bootgen
 
       - name: Download the U-Boot tools
         uses: actions/download-artifact@v8
@@ -178,6 +186,7 @@ jobs:
   package:
     name: Build and check the package
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
