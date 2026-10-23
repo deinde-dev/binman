@@ -865,11 +865,11 @@ class Entry_fit(Entry_section):
                                 pass
                             elif pname == 'fit,compatible':
                                 fdt_phase = fdt_util.GetString(node, pname)
-                                data = tools.read_file(fname)
-                                fdt = Fdt.FromData(data)
-                                fdt.Scan()
-                                prop = fdt.GetRoot().props['compatible']
-                                fsw.property('compatible', prop.bytes)
+                                # Read just this property, since scanning
+                                # the whole devicetree is slow
+                                fdt_obj = libfdt.Fdt(tools.read_file(fname))
+                                compat = fdt_obj.getprop(0, 'compatible')
+                                fsw.property('compatible', bytes(compat))
                             elif pname == 'fit,fdt-phase':
                                 fdt_phase = fdt_util.GetString(node, pname)
                             elif pname.startswith('fit,'):
