@@ -900,7 +900,9 @@ class TestBlobFiles(unittest.TestCase):
             tools.write_file(fname, data)
         server = http.server.ThreadingHTTPServer(
             ('127.0.0.1', 0), functools.partial(QuietHandler, directory=root))
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        # Poll often so that shutdown() returns quickly
+        thread = threading.Thread(target=server.serve_forever, args=(0.01,),
+                                  daemon=True)
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
