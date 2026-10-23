@@ -4941,6 +4941,22 @@ FLASH@0xffff0000 0x10000 {
             self.assertEqual(len(expected), size)
             self.assertEqual(expected, data[image_pos:image_pos+size])
 
+    def testFitLarge(self):
+        """Test a FIT which is larger than its initial buffer"""
+        data, _, _, out_dtb_fname = self._DoReadFileDtb('fit/large.dts',
+                                                        update_dtb=True)
+        dtb = fdt.Fdt(out_dtb_fname)
+        dtb.Scan()
+        props = self._GetPropTree(dtb, ['image-pos', 'size'])
+        for node, expected in [
+            ('fit/images/kernel', tools.get_bytes(0xaa, 0x30000)),
+            ('fit/images/ramdisk', tools.get_bytes(0xbb, 0x50000)),
+        ]:
+            image_pos = props[f'{node}:image-pos']
+            size = props[f'{node}:size']
+            self.assertEqual(len(expected), size)
+            self.assertEqual(expected, data[image_pos:image_pos + size])
+
     def testFitExternal(self):
         """Test an image with an FIT with external images"""
         data = self._DoReadFile('fit/external.dts')

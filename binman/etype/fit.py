@@ -25,6 +25,20 @@ OPERATIONS = {
     'split-elf': OP_SPLIT_ELF,
     }
 
+class GrowingFdtSw(libfdt.FdtSw):
+    """FdtSw which doubles the size of its buffer when it runs out of space
+
+    FdtSw grows its buffer by INC_SIZE bytes each time, copying the contents
+    to a new buffer. When the FIT holds large images this takes time which is
+    proportional to the square of the FIT size. Grow the buffer geometrically
+    instead.
+    """
+    INC_SIZE = 65536
+
+    def resize(self, size):
+        super().resize(size)
+        self.INC_SIZE = size
+
 # pylint: disable=invalid-name
 class Entry_fit(Entry_section):
 
@@ -1038,8 +1052,7 @@ class Entry_fit(Entry_section):
 
         # Build a new tree with all nodes and properties starting from the
         # entry node
-        fsw = libfdt.FdtSw()
-        fsw.INC_SIZE = 65536
+        fsw = GrowingFdtSw()
         fsw.finish_reservemap()
         to_remove = []
         loadables = []
