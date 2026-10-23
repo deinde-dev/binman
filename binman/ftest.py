@@ -161,6 +161,10 @@ class TestFunctional(unittest.TestCase):
     In some cases a 'real' file must be used - these are also supplied in
     the test/ diurectory.
     """
+    # Private and public key used by the signing tests, as a tuple of bytes.
+    # Generating an RSA4096 key takes a while, so this is done only once
+    _sign_keys = None
+
     @classmethod
     def setUpClass(cls):
         global entry
@@ -2078,8 +2082,9 @@ class TestFunctional(unittest.TestCase):
                                 tmpdir, argv[argv.index('--directory') + 1]))
                         server = http.server.ThreadingHTTPServer(
                             ('localhost', 0), handler)
+                        # Poll often so that shutdown() returns quickly
                         threading.Thread(target=server.serve_forever,
-                                         daemon=True).start()
+                                         args=(0.01,), daemon=True).start()
                         ports[argv[-1]] = server.server_address[1]
                     else:
                         result = command.run_one(
@@ -4940,6 +4945,22 @@ FLASH@0xffff0000 0x10000 {
             size = props[f"{node}:size"]
             self.assertEqual(len(expected), size)
             self.assertEqual(expected, data[image_pos:image_pos+size])
+
+    def testFitLarge(self):
+        """Test a FIT which is larger than its initial buffer"""
+        data, _, _, out_dtb_fname = self._DoReadFileDtb('fit/large.dts',
+                                                        update_dtb=True)
+        dtb = fdt.Fdt(out_dtb_fname)
+        dtb.Scan()
+        props = self._GetPropTree(dtb, ['image-pos', 'size'])
+        for node, expected in [
+            ('fit/images/kernel', tools.get_bytes(0xaa, 0x30000)),
+            ('fit/images/ramdisk', tools.get_bytes(0xbb, 0x50000)),
+        ]:
+            image_pos = props[f'{node}:image-pos']
+            size = props[f'{node}:size']
+            self.assertEqual(len(expected), size)
+            self.assertEqual(expected, data[image_pos:image_pos + size])
 
     def testFitExternal(self):
         """Test an image with an FIT with external images"""
@@ -7845,9 +7866,15 @@ fdt         fdtmap                Extract the devicetree blob from the fdtmap
         fit = tools.get_output_filename('fit.fit')
         key_dir = tools.get_output_dir()
 
-        tools.run('openssl', 'req', '-batch' , '-newkey', 'rsa:4096',
-                  '-sha256', '-new',  '-nodes',  '-x509', '-keyout',
-                  private_key, '-out', public_key)
+        if TestFunctional._sign_keys:
+            tools.write_file(private_key, TestFunctional._sign_keys[0])
+            tools.write_file(public_key, TestFunctional._sign_keys[1])
+        else:
+            tools.run('openssl', 'req', '-batch' , '-newkey', 'rsa:4096',
+                      '-sha256', '-new',  '-nodes',  '-x509', '-keyout',
+                      private_key, '-out', public_key)
+            TestFunctional._sign_keys = (tools.read_file(private_key),
+                                         tools.read_file(public_key))
         tools.run('fdt_add_pubkey', '-a', 'sha256,rsa4096', '-k', key_dir,
                   '-n', 'test_key', '-r', 'conf', dtb)
 

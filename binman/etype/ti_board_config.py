@@ -27,6 +27,11 @@ BOARDCFG_PM = 0xE
 BOARDCFG_RM = 0xC
 BOARDCFG_NUM_ELEMS = 4
 
+# Board-config binaries already compiled, keyed by the contents of the config
+# and schema files. An image often includes the same board config several
+# times, and linting and validating the YAML is slow
+compiled_cache = {}
+
 class Entry_ti_board_config(Entry_section):
     """An entry containing a TI schema validated board config binary
 
@@ -245,13 +250,17 @@ class Entry_ti_board_config(Entry_section):
             return data
 
         else:
-            with open(self._config_file, 'r') as f:
-                self.file_yaml = yaml.safe_load(f)
-            with open(self._schema_file, 'r') as sch:
-                self.schema_yaml = yaml.safe_load(sch)
+            config_text = tools.read_file(self._config_file, binary=False)
+            schema_text = tools.read_file(self._schema_file, binary=False)
+            key = (config_text, schema_text)
+            data = compiled_cache.get(key)
+            if data is not None:
+                return bytearray(data)
+            self.file_yaml = yaml.safe_load(config_text)
+            self.schema_yaml = yaml.safe_load(schema_text)
 
             yaml_config = config.YamlLintConfig("extends: default")
-            for p in yamllint.linter.run(open(self._config_file, "r"), yaml_config):
+            for p in yamllint.linter.run(config_text, yaml_config):
                 self.Raise(f"Yamllint error: Line {p.line} in {self._config_file}: {p.rule}")
             try:
                 validate(self.file_yaml, self.schema_yaml)
@@ -259,6 +268,7 @@ class Entry_ti_board_config(Entry_section):
                 self.Raise(f"Schema validation error: {e}")
 
             data = self._generate_binaries()
+            compiled_cache[key] = bytes(data)
             return data
 
     def SetImagePos(self, image_pos):

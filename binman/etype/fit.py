@@ -25,6 +25,20 @@ OPERATIONS = {
     'split-elf': OP_SPLIT_ELF,
     }
 
+class GrowingFdtSw(libfdt.FdtSw):
+    """FdtSw which doubles the size of its buffer when it runs out of space
+
+    FdtSw grows its buffer by INC_SIZE bytes each time, copying the contents
+    to a new buffer. When the FIT holds large images this takes time which is
+    proportional to the square of the FIT size. Grow the buffer geometrically
+    instead.
+    """
+    INC_SIZE = 65536
+
+    def resize(self, size):
+        super().resize(size)
+        self.INC_SIZE = size
+
 # pylint: disable=invalid-name
 class Entry_fit(Entry_section):
 
@@ -865,11 +879,11 @@ class Entry_fit(Entry_section):
                                 pass
                             elif pname == 'fit,compatible':
                                 fdt_phase = fdt_util.GetString(node, pname)
-                                data = tools.read_file(fname)
-                                fdt = Fdt.FromData(data)
-                                fdt.Scan()
-                                prop = fdt.GetRoot().props['compatible']
-                                fsw.property('compatible', prop.bytes)
+                                # Read just this property, since scanning
+                                # the whole devicetree is slow
+                                fdt_obj = libfdt.Fdt(tools.read_file(fname))
+                                compat = fdt_obj.getprop(0, 'compatible')
+                                fsw.property('compatible', bytes(compat))
                             elif pname == 'fit,fdt-phase':
                                 fdt_phase = fdt_util.GetString(node, pname)
                             elif pname.startswith('fit,'):
@@ -1038,8 +1052,7 @@ class Entry_fit(Entry_section):
 
         # Build a new tree with all nodes and properties starting from the
         # entry node
-        fsw = libfdt.FdtSw()
-        fsw.INC_SIZE = 65536
+        fsw = GrowingFdtSw()
         fsw.finish_reservemap()
         to_remove = []
         loadables = []
@@ -1079,24 +1092,68 @@ class Entry_fit(Entry_section):
         if self.mkimage in self.missing_bintools:
             return
 
-        fdt = Fdt.FromData(self.GetData())
-        fdt.Scan()
+        # Look up just the properties needed, since scanning the whole FIT is
+        # slow when it holds large images
+        fdt_obj = libfdt.Fdt(self.GetData())
+
+        def _get_int(node_off, name):
+            """Read an integer property from a node in the FIT
+
+            Args:
+                node_off (int): Offset of the node
+                name (str): Name of the property
+
+            Returns:
+                int: Value of the property, or None if it is not present
+            """
+            # This returns an error code instead of a Property if the
+            # property is not present
+            prop = fdt_obj.getprop(node_off, name, libfdt.QUIET_NOTFOUND)
+            if prop == -libfdt.NOTFOUND:
+                return None
+            return prop.as_uint32()
+
+        def _find_prop(node_off, name):
+            """Find a property in a node in the FIT
+
+            getprop() provides the value of a property but not its offset,
+            which is needed to work out where the value is in the FIT. So
+            look through the node's properties for the one with this name.
+
+            Args:
+                node_off (int): Offset of the node
+                name (str): Name of the property
+
+            Returns:
+                tuple:
+                    int: Offset of the property, or None if not present
+                    int: Length of its value, or None if not present
+            """
+            poffset = fdt_obj.first_property_offset(node_off,
+                                                    libfdt.QUIET_NOTFOUND)
+            while poffset >= 0:
+                prop = fdt_obj.get_property_by_offset(poffset)
+                if prop.name == name:
+                    return poffset, len(prop)
+                poffset = fdt_obj.next_property_offset(poffset,
+                                                       libfdt.QUIET_NOTFOUND)
+            return None, None
 
         for image_name, entry in self._entries.items():
             path = f"/images/{image_name}"
-            node = fdt.GetNode(path)
+            node_off = fdt_obj.path_offset(path)
 
-            data_prop = node.props.get("data")
-            data_pos = fdt_util.GetInt(node, "data-position")
-            data_offset = fdt_util.GetInt(node, "data-offset")
-            data_size = fdt_util.GetInt(node, "data-size")
+            data_poffset, data_len = _find_prop(node_off, 'data')
+            data_pos = _get_int(node_off, "data-position")
+            data_offset = _get_int(node_off, "data-offset")
+            data_size = _get_int(node_off, "data-size")
 
             # Contents are inside the FIT
-            if data_prop is not None:
-                # GetOffset() returns offset of a fdt_property struct,
-                # which has 3 fdt32_t members before the actual data.
-                offset = data_prop.GetOffset() + 12
-                size = len(data_prop.bytes)
+            if data_poffset is not None:
+                # The property offset is that of a fdt_property struct, which
+                # has 3 fdt32_t members before the actual data
+                offset = fdt_obj.off_dt_struct() + data_poffset + 12
+                size = data_len
 
             # External offset from the base of the FIT
             elif data_pos is not None:
@@ -1105,7 +1162,7 @@ class Entry_fit(Entry_section):
 
             # External offset from the end of the FIT, not used in binman
             elif data_offset is not None: # pragma: no cover
-                offset = fdt.GetFdtObj().totalsize() + data_offset
+                offset = fdt_obj.totalsize() + data_offset
                 size = data_size
 
             # This should never happen
