@@ -374,7 +374,8 @@ class Bintool:
             args = ['sudo', 'apt-get', 'update', '-y']
             print('- %s' % ' '.join(args))
             tools.run(*args)
-            cls.apt_updated = True
+            # Set this on the base class, so that it covers every bintool
+            Bintool.apt_updated = True
         args = ['sudo', 'apt-get', 'install', '-y', package]
         print('- %s' % ' '.join(args))
         tools.run(*args)
