@@ -8,6 +8,7 @@
 import collections
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 import unittest.mock
@@ -21,6 +22,23 @@ from u_boot_pylib import command
 from u_boot_pylib import terminal
 from u_boot_pylib import test_util
 from u_boot_pylib import tools
+
+# Fake 'sudo' which records each command it is given. It handles
+# 'apt-get install' by creating a stand-in for the tool in the package, so
+# that the tool can then be found on the PATH
+FAKE_SUDO = '''#!{python}
+import os
+import sys
+
+bindir = os.path.dirname(os.path.abspath(sys.argv[0]))
+with open(os.path.join(bindir, 'log'), 'a') as outf:
+    print(' '.join(sys.argv[1:]), file=outf)
+if sys.argv[1:3] == ['apt-get', 'install']:
+    fname = os.path.join(bindir, sys.argv[-1])
+    with open(fname, 'w') as outf:
+        print('#!/bin/sh', file=outf)
+    os.chmod(fname, 0o755)
+'''
 
 # pylint: disable=R0904
 class TestBintool(unittest.TestCase):
@@ -283,6 +301,36 @@ class TestBintool(unittest.TestCase):
             with terminal.capture() as _:
                 result = btest.fetch_tool(bintool.FETCH_BIN, col, False)
         self.assertEqual(bintool.FETCHED, result)
+
+    def test_apt_install_missing(self):
+        """Test that fetching missing tools installs their packages with apt"""
+        bindir = os.path.join(self._indir, 'bin')
+        os.mkdir(bindir)
+        sudo = os.path.join(bindir, 'sudo')
+        tools.write_file(sudo, FAKE_SUDO.format(python=sys.executable),
+                         binary=False)
+        os.chmod(sudo, 0o755)
+
+        # Make sure that only the fake tools can be found
+        btools = [Bintool.create(name) for name in ['lz4', 'lzop']]
+        with unittest.mock.patch.dict('os.environ', {'PATH': bindir}), \
+                unittest.mock.patch.object(tools, 'tool_search_paths', []), \
+                unittest.mock.patch.object(Bintool, 'apt_updated', False):
+            for btool in btools:
+                self.assertFalse(btool.is_present())
+            with terminal.capture() as (stdout, _):
+                self.assertTrue(Bintool.fetch_tools(bintool.FETCH_ANY,
+                                                    ['lz4', 'lzop']))
+            for btool in btools:
+                self.assertTrue(btool.is_present())
+        self.assertIn('- sudo apt-get install -y lzop', stdout.getvalue())
+
+        # The package list should be updated only once
+        self.assertEqual(
+            ['apt-get update -y', 'apt-get install -y lz4',
+             'apt-get install -y lzop'],
+            tools.read_file(os.path.join(bindir, 'log'),
+                            binary=False).splitlines())
 
     def test_no_fetch(self):
         """Test fetching when there is no method"""
