@@ -8,6 +8,11 @@ the project follows `Semantic Versioning <https://semver.org/>`_.
 Unreleased
 ----------
 
+Changed
+~~~~~~~
+- The devicetree library is now a dependency, from the ``dtoc`` package,
+  rather than a copy vendored into binman.
+
 0.2.0 - 2026-10-21
 ------------------
 
