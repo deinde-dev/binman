@@ -8,10 +8,24 @@ the project follows `Semantic Versioning <https://semver.org/>`_.
 Unreleased
 ----------
 
+0.2.1 - 2026-10-24
+------------------
+
 Changed
 ~~~~~~~
 - The devicetree library is now a dependency, from the ``dtoc`` package,
   rather than a copy vendored into binman.
+- Building images is faster. binman imports its test utilities only when
+  running its tests, which saves about 0.1 seconds on every run. Each TI board
+  config is compiled only once, taking am62x_evm_r5 from 2.7 to 0.6 seconds.
+  ``fit,compatible`` reads just the root compatible string of each devicetree,
+  and a FIT is built and positioned without scanning its contents, so a FIT
+  holding a 32MB blob takes 1.0 seconds rather than 3.2.
+
+Fixed
+~~~~~
+- ``binman tool -f missing`` updates the apt package list once, rather than
+  once for each tool which it installs with apt.
 
 0.2.0 - 2026-10-21
 ------------------
