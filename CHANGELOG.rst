@@ -8,6 +8,12 @@ the project follows `Semantic Versioning <https://semver.org/>`_.
 Unreleased
 ----------
 
+Fixed
+~~~~~
+- A template can contain nodes which are referenced by phandle. Inserting
+  such a template no longer fails with ``Cannot find node for phandle``.
+  This needs dtoc 0.1.1 or later.
+
 0.2.1 - 2026-10-24
 ------------------
 
