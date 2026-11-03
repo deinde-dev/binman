@@ -30,7 +30,7 @@ dependencies = [
     "PyYAML",
     "yamllint",
     "u-boot-pylib >= 0.1.0",
-    "dtoc >= 0.1.0",
+    "dtoc >= 0.1.1",
 ]
 
 [project.optional-dependencies]
