@@ -2,7 +2,7 @@ concurrencytest==0.1.11
 coverage==7.16.2
 dtoc==0.1.1
 jsonschema==4.26.0
-pycryptodomex==3.24.1
+pycryptodomex==3.24.2
 pyelftools==0.33
 pylibfdt==1.7.2.post2
 PyYAML==6.0.3
