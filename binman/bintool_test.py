@@ -388,6 +388,19 @@ class TestBintool(unittest.TestCase):
                 btool, 'run_cmd_result', return_value=command.CommandResult()):
                 self.assertEqual('unknown', btool.version())
 
+    def test_lz4_version(self):
+        """Test reading the version from old and new lz4 banners"""
+        btool = Bintool.create('lz4')
+        for banner, expect in (
+                ('*** LZ4 command line interface 64-bits v1.9.4, by Yann '
+                 'Collet ***', 'v1.9.4'),
+                ('*** lz4 v1.10.0 64-bit multithread, by Yann Collet ***',
+                 'v1.10.0')):
+            with unittest.mock.patch.object(
+                    btool, 'run_cmd_result',
+                    return_value=command.CommandResult(stdout=banner)):
+                self.assertEqual(expect, btool.version())
+
     def test_force_missing(self):
         btool = Bintool.create('_testing')
         btool.present = True

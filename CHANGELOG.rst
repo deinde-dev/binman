@@ -13,6 +13,8 @@ Fixed
 - A template can contain nodes which are referenced by phandle. Inserting
   such a template no longer fails with ``Cannot find node for phandle``.
   This needs dtoc 0.1.1 or later.
+- ``binman tool -l`` shows the version of lz4 1.10.0 and later, whose banner
+  no longer has a comma after the version.
 
 0.2.1 - 2026-10-24
 ------------------
