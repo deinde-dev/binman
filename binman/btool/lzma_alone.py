@@ -116,11 +116,10 @@ class Bintoollzma_alone(bintool.Bintool):
         Returns:
             str: Version number of lzma_alone
         """
-        out = self.run_cmd_result('', raise_on_error=False).stderr.strip()
-        lines = out.splitlines()
-        if not lines:
-            return super().version()
-        out = lines[0]
+        # Version 9.22 writes its banner to stderr and later ones to stdout,
         # e.g. LZMA 9.22 beta : Igor Pavlov : Public domain : 2011-04-18
-        m_version = re.match(r'LZMA ([^:]*).*', out)
-        return m_version.group(1).strip() if m_version else out
+        # or LZMA 25.00 (x64) : Igor Pavlov : Public domain : 2025-07-05
+        result = self.run_cmd_result(raise_on_error=False)
+        m_version = re.search(r'^LZMA ([^:(]*)',
+                              result.stdout + result.stderr, re.M)
+        return m_version.group(1).strip() if m_version else super().version()
