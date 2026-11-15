@@ -12,8 +12,8 @@ env:
   # U-Boot source to build mkimage and the other U-Boot tools from. Some
   # tests check the exact output of these tools, so keep this in step with
   # the U-Boot commit which binman was last synced with.
-  UBOOT_REPO: https://concept.u-boot.org/u-boot/u-boot.git
-  UBOOT_REF: 6454c4a75b0132b9d944e18ef3e4659d857d3964
+  UBOOT_REPO: https://git.u-boot-project.org/u-boot/u-boot.git
+  UBOOT_REF: 6487c50b8a40f2668ab98a892b9300ad5c181f38
 
 jobs:
   uboot-tools:
