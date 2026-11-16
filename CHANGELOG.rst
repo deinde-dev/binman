@@ -8,8 +8,28 @@ the project follows `Semantic Versioning <https://semver.org/>`_.
 Unreleased
 ----------
 
+0.3.0 - 2026-11-15
+------------------
+
+Added
+~~~~~
+- The ``pre-load`` entry type can sign with ECDSA as well as RSA, with an
+  ``algo-name`` such as ``sha256,ecdsa256``, ``sha384,ecdsa384`` or
+  ``sha512,ecdsa521``.
+- The ``nxp-imx8mcst`` entry type can select the key in the SRK table with
+  ``nxp,srk-index`` or the ``SRK_INDEX`` environment variable. The default is
+  the first key, as before.
+
+Changed
+~~~~~~~
+- The ``nxp-imx9image`` entry type looks for its external and appended files
+  in the input directories given with ``-I``, like other entry types, rather
+  than in the output directory.
+
 Fixed
 ~~~~~
+- ``binman entry-docs`` and the bintool documentation no longer lose the
+  first four characters of each line on Python 3.13 and later.
 - A template can contain nodes which are referenced by phandle. Inserting
   such a template no longer fails with ``Cannot find node for phandle``.
   This needs dtoc 0.1.1 or later.
