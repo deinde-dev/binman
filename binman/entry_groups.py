@@ -41,9 +41,10 @@ GROUPS = [
       'intel_vga']),
     ('SoC vendors',
      'Entry types for the boot images and firmware of particular SoCs.',
-     ['nxp_header_ddrfw', 'nxp_imx8mcst', 'nxp_imx8mimage', 'nxp_imx9image',
-      'renesas_rcar4_sa0', 'rockchip_tpl', 'ti_board_config', 'ti_dm',
-      'ti_secure', 'ti_secure_rom', 'xilinx_bootgen']),
+     ['nxp_header_ddrfw', 'nxp_imx8mcst', 'nxp_imx8mimage', 'nxp_imx93cst',
+      'nxp_imx9image', 'nxp_imxcst', 'renesas_rcar4_sa0', 'rockchip_tpl',
+      'ti_board_config', 'ti_dm', 'ti_secure', 'ti_secure_rom',
+      'xilinx_bootgen']),
     ('U-Boot',
      "Entry types for U-Boot's own binaries, for each of its phases, and for "
      'code which U-Boot provides for particular architectures.',
