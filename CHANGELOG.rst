@@ -8,6 +8,19 @@ the project follows `Semantic Versioning <https://semver.org/>`_.
 Unreleased
 ----------
 
+Added
+~~~~~
+- The ``nxp-imx93cst`` entry type signs the SPL and U-Boot proper containers
+  of an i.MX93 ``flash.bin`` with NXP's Code Signing Tool (CST), using AHAB.
+  It shares a new ``nxp-imxcst`` base with ``nxp-imx8mcst``.
+- TI's x509 certificates can include the boot and load extensions, which
+  TIFS needs in order to boot a core. Each extension is added when its
+  properties are given, and leaving out only some of them is an error.
+- FIT entries take a ``keydir`` entry argument, e.g. ``-a keydir=keys``, and
+  pass it to mkimage's ``-k`` when ``fit,sign`` or ``fit,encrypt`` is used.
+  Without it, the key directory is found among the input directories, as
+  before.
+
 0.3.0 - 2026-11-15
 ------------------
 
